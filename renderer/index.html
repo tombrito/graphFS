@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GraphFS — MVP</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>GraphFS — Visualização inicial do filesystem</h1>
+      <p class="subtitle">Listando conteúdo de <span id="root-path"></span></p>
+      <p class="hint">Para testar outro caminho, defina a variável de ambiente <code>GRAPHFS_ROOT</code> e reinicie o app.</p>
+    </header>
+
+    <main>
+      <section class="left">
+        <div id="pixi-container"></div>
+        <div id="legend">
+          <span class="badge directory">Pasta</span>
+          <span class="badge file">Arquivo</span>
+          <span class="badge fallback" id="fallback-badge" hidden>Dados de demonstração</span>
+        </div>
+      </section>
+      <section class="right">
+        <h2>Detalhes do nó selecionado</h2>
+        <div id="details">
+          <p>Selecione um item no grafo para ver detalhes.</p>
+        </div>
+        <h3>Estrutura em árvore</h3>
+        <div id="tree-view"></div>
+      </section>
+    </main>
+
+    <script type="module" src="renderer.js"></script>
+  </body>
+</html>
