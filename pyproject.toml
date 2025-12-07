@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graphfs"
+version = "0.1.0"
+description = "Ferramenta CLI para visualizar pastas com prioridade de relevância"
+authors = [{name = "graphFS", email = ""}]
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+keywords = ["filesystem", "graph", "cli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.scripts]
+graphfs = "graphfs.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
