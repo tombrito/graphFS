@@ -1,0 +1,124 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+}
+
+header {
+  padding: 16px 24px;
+  background: #111827;
+  border-bottom: 1px solid #1f2937;
+}
+
+h1 {
+  margin: 0 0 4px 0;
+  font-size: 22px;
+}
+
+.subtitle {
+  margin: 0;
+  color: #9ca3af;
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+main {
+  display: flex;
+  height: calc(100vh - 110px);
+}
+
+section.left {
+  flex: 2;
+  padding: 16px;
+  border-right: 1px solid #1f2937;
+}
+
+section.right {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  background: #0f172a;
+}
+
+#pixi-container {
+  height: 100%;
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+}
+
+#legend {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.badge {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.badge.directory {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.badge.file {
+  background: rgba(96, 165, 250, 0.15);
+  border-color: rgba(96, 165, 250, 0.4);
+  color: #60a5fa;
+}
+
+.badge.fallback {
+  background: rgba(248, 180, 0, 0.15);
+  border-color: rgba(248, 180, 0, 0.4);
+  color: #f8b400;
+}
+
+#details p {
+  margin-top: 0;
+  color: #cbd5e1;
+}
+
+#tree-view {
+  margin-top: 12px;
+  font-family: "Fira Code", monospace;
+  white-space: pre;
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 12px;
+  color: #e5e7eb;
+}
+
+.tree-dir {
+  color: #38bdf8;
+}
+
+.tree-file {
+  color: #60a5fa;
+}
+
+#details .path {
+  color: #a5b4fc;
+  word-break: break-all;
+}
+
+#details .type {
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
