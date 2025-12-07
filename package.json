@@ -1,0 +1,15 @@
+{
+  "name": "graphfs",
+  "version": "0.1.0",
+  "description": "MVP do GraphFS com visualização simples em Electron e PixiJS.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^31.3.0",
+    "pixi.js": "^8.2.1"
+  }
+}
