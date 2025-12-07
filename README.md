@@ -13,3 +13,11 @@ O código Python do MVP foi removido. O repositório agora está pronto para rec
 ## Próximos passos
 
 Consulte o [`backlog.md`](backlog.md) para priorizar o desenvolvimento das features de painel de pasta, fluxo padrão e ajustes conceituais do grafo.
+
+## Como rodar o MVP de visualização
+
+1. Instale dependências com `npm install` (Electron + PixiJS).
+2. (Opcional) Ajuste o caminho de origem definindo `GRAPHFS_ROOT` (por padrão `C:\\tmp`).
+3. Execute `npm start` para abrir a janela Electron e ver o grafo com os arquivos do diretório alvo.
+
+A UI mostra o grafo à esquerda (nós de pastas/arquivos com linhas de hierarquia) e, à direita, detalhes do nó selecionado e uma árvore textual completa.
