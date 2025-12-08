@@ -33,6 +33,8 @@ const COLORS = {
   rootNode: 0xc9b77d,
   directory: 0x6488a8,
   file: 0x8b9a6b,
+  moreDirs: 0x4a6a8a,
+  moreFiles: 0x6b7a4b,
   edge: 0xc9b77d,
   edgeGlow: 0xf4e4bc,
   glow: 0xc9b77d,
@@ -472,6 +474,21 @@ function createFileIcon(color, isRoot) {
   return icon;
 }
 
+function createMoreIcon(color) {
+  const icon = new PIXI.Graphics();
+  const dotRadius = 1.5;
+  const spacing = 4;
+
+  // Três pontinhos horizontais
+  icon.beginFill(color, 0.8);
+  icon.drawCircle(-spacing, 0, dotRadius);
+  icon.drawCircle(0, 0, dotRadius);
+  icon.drawCircle(spacing, 0, dotRadius);
+  icon.endFill();
+
+  return icon;
+}
+
 function createNode(node, allNodes) {
   const container = new PIXI.Container();
   container.x = node.x;
@@ -480,8 +497,15 @@ function createNode(node, allNodes) {
 
   const isRoot = node.depth === 0;
   const isDirectory = node.type === 'directory';
-  const baseRadius = isRoot ? 35 : (isDirectory ? 22 : 14);
-  const color = isRoot ? COLORS.rootNode : (isDirectory ? COLORS.directory : COLORS.file);
+  const isMoreDirs = node.type === 'more-dirs';
+  const isMoreFiles = node.type === 'more-files';
+  const isMoreNode = isMoreDirs || isMoreFiles;
+
+  const baseRadius = isRoot ? 35 : (isDirectory ? 22 : (isMoreNode ? 18 : 14));
+  const color = isRoot ? COLORS.rootNode :
+                (isDirectory ? COLORS.directory :
+                (isMoreDirs ? COLORS.moreDirs :
+                (isMoreFiles ? COLORS.moreFiles : COLORS.file)));
 
   // Glow externo
   const outerGlow = new PIXI.Graphics();
@@ -502,43 +526,66 @@ function createNode(node, allNodes) {
 
   // Círculo principal
   const body = new PIXI.Graphics();
-  body.beginFill(color, 0.5);
-  body.drawCircle(0, 0, baseRadius);
-  body.endFill();
-  body.beginFill(0xffffff, 0.15);
-  body.drawCircle(0, -baseRadius * 0.2, baseRadius * 0.7);
-  body.endFill();
-  body.beginFill(0xffffff, 0.6);
-  body.drawCircle(0, 0, baseRadius * 0.25);
-  body.endFill();
+  if (isMoreNode) {
+    // Nós "more" são mais discretos e vazados
+    body.beginFill(color, 0.15);
+    body.drawCircle(0, 0, baseRadius);
+    body.endFill();
+  } else {
+    body.beginFill(color, 0.5);
+    body.drawCircle(0, 0, baseRadius);
+    body.endFill();
+    body.beginFill(0xffffff, 0.15);
+    body.drawCircle(0, -baseRadius * 0.2, baseRadius * 0.7);
+    body.endFill();
+    body.beginFill(0xffffff, 0.6);
+    body.drawCircle(0, 0, baseRadius * 0.25);
+    body.endFill();
+  }
   container.addChild(body);
   container._body = body;
 
-  // Anel dourado
+  // Anel (borda pontilhada para nós "more")
   const ring = new PIXI.Graphics();
-  ring.setStrokeStyle({ width: 1.5, color: COLORS.edge, alpha: 0.6 });
-  ring.drawCircle(0, 0, baseRadius + 2);
-  ring.stroke();
+  if (isMoreNode) {
+    // Borda pontilhada para nós "more"
+    ring.setStrokeStyle({ width: 1.5, color: color, alpha: 0.5 });
+    const steps = 12;
+    for (let i = 0; i < steps; i += 2) {
+      const angle1 = (i / steps) * Math.PI * 2;
+      const angle2 = ((i + 1) / steps) * Math.PI * 2;
+      const radius = baseRadius + 2;
+      ring.moveTo(Math.cos(angle1) * radius, Math.sin(angle1) * radius);
+      ring.lineTo(Math.cos(angle2) * radius, Math.sin(angle2) * radius);
+    }
+    ring.stroke();
+  } else {
+    ring.setStrokeStyle({ width: 1.5, color: COLORS.edge, alpha: 0.6 });
+    ring.drawCircle(0, 0, baseRadius + 2);
+    ring.stroke();
+  }
   container.addChild(ring);
   container._ring = ring;
 
   // Ícone
-  const iconGraphic = isDirectory ? createFolderIcon(color, isRoot) : createFileIcon(color, isRoot);
+  const iconGraphic = isMoreNode ? createMoreIcon(color) :
+                      (isDirectory ? createFolderIcon(color, isRoot) : createFileIcon(color, isRoot));
   container.addChild(iconGraphic);
 
   // Label
   const label = new PIXI.Text({
-    text: truncateName(node.name, isRoot ? 20 : 15),
+    text: isMoreNode ? node.name : truncateName(node.name, isRoot ? 20 : 15),
     style: {
       fontFamily: 'Segoe UI, Arial, sans-serif',
-      fontSize: isRoot ? 14 : 11,
-      fill: COLORS.text,
-      align: 'center'
+      fontSize: isRoot ? 14 : (isMoreNode ? 10 : 11),
+      fill: isMoreNode ? COLORS.textMuted : COLORS.text,
+      align: 'center',
+      fontStyle: isMoreNode ? 'italic' : 'normal'
     }
   });
   label.anchor.set(0.5, 0);
   label.y = baseRadius + 10;
-  label.alpha = 0.8;
+  label.alpha = isMoreNode ? 0.6 : 0.8;
   container.addChild(label);
   container._label = label;
 

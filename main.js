@@ -19,7 +19,8 @@ function createWindow() {
 }
 
 const TOP_FILES_PER_DIR = 3;
-const MAX_DEPTH = 1; // Apenas 1 nível de subdiretórios
+const TOP_DIRS_PER_DIR = 3;
+const MAX_DEPTH = 2; // 3 níveis de diretórios (root + 2 níveis de subdiretórios)
 
 function buildTree(targetPath, currentDepth = 0) {
   const stats = fs.statSync(targetPath);
@@ -58,16 +59,47 @@ function buildTree(targetPath, currentDepth = 0) {
   const directories = allChildren.filter(c => c.type === 'directory');
   const files = allChildren.filter(c => c.type === 'file');
 
+  // Ordenar diretórios por data de modificação (mais recentes primeiro)
+  directories.sort((a, b) => b.mtime - a.mtime);
+
   // Ordenar arquivos por data de modificação (mais recentes primeiro)
   files.sort((a, b) => b.mtime - a.mtime);
 
-  // Pegar apenas os top N arquivos mais recentes
+  // Pegar apenas os top N diretórios e arquivos mais recentes
+  const topDirs = directories.slice(0, TOP_DIRS_PER_DIR);
   const topFiles = files.slice(0, TOP_FILES_PER_DIR);
+
+  const hiddenDirCount = directories.length - topDirs.length;
   const hiddenFileCount = files.length - topFiles.length;
 
-  // Combinar: todos os diretórios + top arquivos
-  node.children = [...directories, ...topFiles];
-  node.hiddenDirsCount = 0;
+  // Combinar: top diretórios + top arquivos
+  node.children = [...topDirs];
+
+  // Adicionar nó "..." para diretórios ocultos
+  if (hiddenDirCount > 0) {
+    node.children.push({
+      name: `... +${hiddenDirCount} ${hiddenDirCount === 1 ? 'pasta' : 'pastas'}`,
+      path: `${targetPath}/__more_dirs__`,
+      type: 'more-dirs',
+      hiddenCount: hiddenDirCount,
+      mtime: 0
+    });
+  }
+
+  node.children.push(...topFiles);
+
+  // Adicionar nó "..." para arquivos ocultos
+  if (hiddenFileCount > 0) {
+    node.children.push({
+      name: `... +${hiddenFileCount} ${hiddenFileCount === 1 ? 'arquivo' : 'arquivos'}`,
+      path: `${targetPath}/__more_files__`,
+      type: 'more-files',
+      hiddenCount: hiddenFileCount,
+      mtime: 0
+    });
+  }
+
+  node.hiddenDirsCount = hiddenDirCount;
   node.hiddenFilesCount = hiddenFileCount;
   node.totalFilesCount = files.length;
 
