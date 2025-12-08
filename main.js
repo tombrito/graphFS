@@ -18,22 +18,59 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
 
-function buildTree(targetPath) {
+const TOP_FILES_PER_DIR = 3;
+const MAX_DEPTH = 1; // Apenas 1 nível de subdiretórios
+
+function buildTree(targetPath, currentDepth = 0) {
   const stats = fs.statSync(targetPath);
+  const isDirectory = stats.isDirectory();
   const node = {
     name: path.basename(targetPath) || targetPath,
     path: targetPath,
-    type: stats.isDirectory() ? 'directory' : 'file'
+    type: isDirectory ? 'directory' : 'file',
+    mtime: stats.mtimeMs
   };
 
-  if (!stats.isDirectory()) {
+  if (!isDirectory) {
+    return node;
+  }
+
+  // Se passou do limite de profundidade, não expandir filhos
+  if (currentDepth >= MAX_DEPTH) {
+    const children = fs.readdirSync(targetPath, { withFileTypes: true });
+    const dirCount = children.filter(e => e.isDirectory()).length;
+    const fileCount = children.filter(e => !e.isDirectory()).length;
+
+    node.children = [];
+    node.hiddenDirsCount = dirCount;
+    node.hiddenFilesCount = fileCount;
+    node.totalFilesCount = fileCount;
+    node.collapsed = true;
     return node;
   }
 
   const children = fs.readdirSync(targetPath, { withFileTypes: true });
-  node.children = children.map((entry) =>
-    buildTree(path.join(targetPath, entry.name))
+  const allChildren = children.map((entry) =>
+    buildTree(path.join(targetPath, entry.name), currentDepth + 1)
   );
+
+  // Separar diretórios e arquivos
+  const directories = allChildren.filter(c => c.type === 'directory');
+  const files = allChildren.filter(c => c.type === 'file');
+
+  // Ordenar arquivos por data de modificação (mais recentes primeiro)
+  files.sort((a, b) => b.mtime - a.mtime);
+
+  // Pegar apenas os top N arquivos mais recentes
+  const topFiles = files.slice(0, TOP_FILES_PER_DIR);
+  const hiddenFileCount = files.length - topFiles.length;
+
+  // Combinar: todos os diretórios + top arquivos
+  node.children = [...directories, ...topFiles];
+  node.hiddenDirsCount = 0;
+  node.hiddenFilesCount = hiddenFileCount;
+  node.totalFilesCount = files.length;
+
   return node;
 }
 
@@ -61,34 +98,50 @@ function tryBuildRoot() {
 }
 
 function buildFallbackTree() {
+  const now = Date.now();
   const root = {
     name: 'C:/tmp (demo)'.replace(/\\/g, '/'),
     path: 'C:/tmp',
     type: 'directory',
+    mtime: now,
+    hiddenFilesCount: 0,
+    totalFilesCount: 1,
     children: []
   };
 
   const subfolders = [
-    { name: 'logs', files: ['app.log', 'events.log'] },
-    { name: 'reports', files: ['2024-summary.pdf', 'draft.docx'] },
+    { name: 'logs', files: ['app.log', 'events.log', 'debug.log', 'error.log', 'access.log'] },
+    { name: 'reports', files: ['2024-summary.pdf', 'draft.docx', 'notes.txt', 'backup.zip'] },
     { name: 'scratch', files: ['notes.txt', 'ideas.md'] }
   ];
 
-  root.children = subfolders.map(({ name, files }) => ({
-    name,
-    path: `C:/tmp/${name}`,
-    type: 'directory',
-    children: files.map((file) => ({
+  root.children = subfolders.map(({ name, files }, folderIndex) => {
+    const allFiles = files.map((file, fileIndex) => ({
       name: file,
       path: `C:/tmp/${name}/${file}`,
-      type: 'file'
-    }))
-  }));
+      type: 'file',
+      mtime: now - (fileIndex * 3600000) // Simular datas diferentes
+    }));
+
+    // Aplicar mesma lógica: top 3 arquivos
+    const topFiles = allFiles.slice(0, TOP_FILES_PER_DIR);
+
+    return {
+      name,
+      path: `C:/tmp/${name}`,
+      type: 'directory',
+      mtime: now - (folderIndex * 86400000),
+      children: topFiles,
+      hiddenFilesCount: allFiles.length - topFiles.length,
+      totalFilesCount: allFiles.length
+    };
+  });
 
   root.children.push({
     name: 'readme.txt',
     path: 'C:/tmp/readme.txt',
-    type: 'file'
+    type: 'file',
+    mtime: now
   });
 
   return root;
