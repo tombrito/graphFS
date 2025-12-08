@@ -21,7 +21,7 @@ const COLORS = {
   rootNode: 0x8b5cf6,      // Roxo vibrante
   directory: 0x3b82f6,      // Azul
   file: 0x10b981,           // Verde esmeralda
-  edge: 0x334155,           // Cinza azulado
+  edge: 0x64748b,           // Cinza mais claro para melhor contraste
   edgeHighlight: 0x6366f1,  // Indigo
   glow: 0x8b5cf6,
   text: 0xe2e8f0,
@@ -189,15 +189,16 @@ function drawEdges(edges, nodes) {
       const ctrlX = midX + perpX;
       const ctrlY = midY + perpY;
 
-      // Gradiente na linha (simular com alpha)
-      edgeLayer.moveTo(source.x, source.y);
-      edgeLayer.lineStyle({
-        width: 2,
+      // Pixi.js v8: usar setStrokeStyle + stroke()
+      edgeLayer.setStrokeStyle({
+        width: 2.5,
         color: COLORS.edge,
-        alpha: 0.6,
+        alpha: 0.85,
         cap: 'round'
       });
+      edgeLayer.moveTo(source.x, source.y);
       edgeLayer.quadraticCurveTo(ctrlX, ctrlY, target.x, target.y);
+      edgeLayer.stroke();
     }
   });
 }
