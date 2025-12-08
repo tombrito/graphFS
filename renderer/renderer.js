@@ -7,25 +7,34 @@ const details = document.getElementById('details');
 const fallbackBadge = document.getElementById('fallback-badge');
 
 let app;
-let graphContainer;
-let edgeLayer;
+let worldContainer;
+let starsContainer;
+let nebulaContainer;
+let edgesContainer;
+let particlesContainer;
+let nodesContainer;
+
 let currentZoom = 0.6;
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 2.5;
 let selectedNode = null;
 let nodeGraphics = new Map();
+let edgeData = [];
+let nodesData = [];
+let time = 0;
 
-// Paleta de cores moderna
+// Paleta de cores estilo constellation (dourado sobre preto)
 const COLORS = {
-  background: 0x0a0e17,
-  rootNode: 0x8b5cf6,      // Roxo vibrante
-  directory: 0x3b82f6,      // Azul
-  file: 0x10b981,           // Verde esmeralda
-  edge: 0x64748b,           // Cinza mais claro para melhor contraste
-  edgeHighlight: 0x6366f1,  // Indigo
-  glow: 0x8b5cf6,
-  text: 0xe2e8f0,
-  textMuted: 0x94a3b8
+  background: 0x000008,
+  rootNode: 0xc9b77d,
+  directory: 0x6488a8,
+  file: 0x8b9a6b,
+  edge: 0xc9b77d,
+  edgeGlow: 0xf4e4bc,
+  glow: 0xc9b77d,
+  text: 0xc9b77d,
+  textMuted: 0x7a6f50,
+  nebula: [0x1a0a2e, 0x0a1628, 0x16213e, 0x0f3460]
 };
 
 async function bootstrap() {
@@ -42,10 +51,17 @@ async function bootstrap() {
   const edges = [];
   flattenTree(tree, null, 0, nodes, edges);
   layoutNodesRadial(tree, nodes);
+
+  nodesData = nodes;
+  edgeData = edges;
+
   await buildPixiApp(nodes, edges);
   setupZoomControls();
   setupPanControls();
   renderTree(tree);
+
+  // Iniciar loop de animação
+  app.ticker.add(animate);
 }
 
 function renderNotice(message) {
@@ -72,7 +88,7 @@ function flattenTree(node, parentId, depth, nodes, edges) {
   nodes.push(current);
 
   if (parentId) {
-    edges.push({ source: parentId, target: current.id });
+    edges.push({ source: parentId, target: current.id, particles: [] });
   }
 
   if (node.children) {
@@ -80,16 +96,12 @@ function flattenTree(node, parentId, depth, nodes, edges) {
   }
 }
 
-// Layout radial recursivo - raiz no centro, filhos em círculos
 function layoutNodesRadial(tree, nodes) {
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
-
-  // Raiz no centro
   const root = nodeMap.get(tree.path);
   root.x = 0;
   root.y = 0;
 
-  // Função recursiva para posicionar filhos
   function positionChildren(parentNode, treeNode, startAngle, endAngle, radius) {
     if (!treeNode.children || treeNode.children.length === 0) return;
 
@@ -101,16 +113,13 @@ function layoutNodesRadial(tree, nodes) {
       const childNode = nodeMap.get(childTree.path);
       const angle = startAngle + angleStep * (index + 0.5);
 
-      // Posição do filho
       childNode.x = parentNode.x + Math.cos(angle) * radius;
       childNode.y = parentNode.y + Math.sin(angle) * radius;
       childNode.angle = angle;
 
-      // Calcular raio para próximo nível baseado na quantidade de descendentes
       const descendantCount = countDescendants(childTree);
       const nextRadius = Math.max(80, Math.min(200, 60 + descendantCount * 8));
 
-      // Span angular para os filhos deste nó
       const childAngleSpan = Math.min(angleStep * 0.9, Math.PI * 0.8);
       const childStartAngle = angle - childAngleSpan / 2;
       const childEndAngle = angle + childAngleSpan / 2;
@@ -119,7 +128,6 @@ function layoutNodesRadial(tree, nodes) {
     });
   }
 
-  // Começar layout com raio inicial
   const initialRadius = 150;
   positionChildren(root, tree, 0, Math.PI * 2, initialRadius);
 }
@@ -127,6 +135,103 @@ function layoutNodesRadial(tree, nodes) {
 function countDescendants(node) {
   if (!node.children) return 0;
   return node.children.reduce((sum, child) => sum + 1 + countDescendants(child), 0);
+}
+
+// ============================================
+// STARFIELD - Estrelas que piscam
+// ============================================
+function createStarfield() {
+  const width = app.screen.width;
+  const height = app.screen.height;
+
+  // Estrelas pequenas e fracas
+  for (let i = 0; i < 300; i++) {
+    const star = new PIXI.Graphics();
+    const size = Math.random() * 1.5 + 0.5;
+    const brightness = Math.random() * 0.4 + 0.1;
+
+    star.beginFill(0xffffff, brightness);
+    star.drawCircle(0, 0, size);
+    star.endFill();
+
+    star.x = Math.random() * width * 3 - width;
+    star.y = Math.random() * height * 3 - height;
+    star._baseAlpha = brightness;
+    star._twinkleSpeed = Math.random() * 2 + 1;
+    star._twinkleOffset = Math.random() * Math.PI * 2;
+
+    starsContainer.addChild(star);
+  }
+
+  // Estrelas maiores e mais brilhantes (douradas)
+  for (let i = 0; i < 40; i++) {
+    const star = new PIXI.Graphics();
+    const size = Math.random() * 2 + 1;
+
+    // Glow dourado
+    star.beginFill(COLORS.edge, 0.1);
+    star.drawCircle(0, 0, size * 4);
+    star.endFill();
+
+    // Centro branco
+    star.beginFill(0xffffff, 0.9);
+    star.drawCircle(0, 0, size);
+    star.endFill();
+
+    star.x = Math.random() * width * 3 - width;
+    star.y = Math.random() * height * 3 - height;
+    star._baseAlpha = 0.9;
+    star._twinkleSpeed = Math.random() * 3 + 0.5;
+    star._twinkleOffset = Math.random() * Math.PI * 2;
+
+    starsContainer.addChild(star);
+  }
+}
+
+// ============================================
+// NEBULA - Nuvens coloridas
+// ============================================
+function createNebula() {
+  const nebula = new PIXI.Graphics();
+  const width = app.screen.width;
+  const height = app.screen.height;
+
+  for (let i = 0; i < 6; i++) {
+    const color = COLORS.nebula[Math.floor(Math.random() * COLORS.nebula.length)];
+    const x = Math.random() * width * 2 - width * 0.5;
+    const y = Math.random() * height * 2 - height * 0.5;
+    const radius = Math.random() * 250 + 150;
+
+    nebula.beginFill(color, 0.25);
+    nebula.drawCircle(x, y, radius);
+    nebula.endFill();
+  }
+
+  // Aplicar blur para suavizar
+  nebula.filters = [new PIXI.BlurFilter({ strength: 50 })];
+  nebulaContainer.addChild(nebula);
+}
+
+// ============================================
+// PARTÍCULAS NAS CONEXÕES
+// ============================================
+function createEdgeParticles(edge, source, target) {
+  const particleCount = 2;
+
+  for (let i = 0; i < particleCount; i++) {
+    const particle = new PIXI.Graphics();
+    particle.beginFill(COLORS.edge, 0.8);
+    particle.drawCircle(0, 0, 2);
+    particle.endFill();
+
+    particle._progress = i / particleCount;
+    particle._speed = 0.003 + Math.random() * 0.002;
+    particle._sourceId = source.id;
+    particle._targetId = target.id;
+
+    particlesContainer.addChild(particle);
+    edge.particles.push(particle);
+  }
 }
 
 async function buildPixiApp(nodes, edges) {
@@ -143,79 +248,150 @@ async function buildPixiApp(nodes, edges) {
   pixiContainer.innerHTML = '';
   pixiContainer.appendChild(app.canvas);
 
-  graphContainer = new PIXI.Container();
-  app.stage.addChild(graphContainer);
+  // Criar containers em ordem de camadas
+  worldContainer = new PIXI.Container();
+  starsContainer = new PIXI.Container();
+  nebulaContainer = new PIXI.Container();
+  edgesContainer = new PIXI.Container();
+  particlesContainer = new PIXI.Container();
+  nodesContainer = new PIXI.Container();
 
-  // Camada de edges (conexões)
-  edgeLayer = new PIXI.Graphics();
-  drawEdges(edges, nodes);
-  graphContainer.addChild(edgeLayer);
+  app.stage.addChild(worldContainer);
+  worldContainer.addChild(starsContainer);
+  worldContainer.addChild(nebulaContainer);
+  worldContainer.addChild(edgesContainer);
+  worldContainer.addChild(particlesContainer);
+  worldContainer.addChild(nodesContainer);
+
+  // Criar efeitos de fundo
+  createStarfield();
+  createNebula();
+
+  // Criar edges e partículas
+  edges.forEach((edge) => {
+    const source = nodes.find(n => n.id === edge.source);
+    const target = nodes.find(n => n.id === edge.target);
+    if (source && target) {
+      createEdgeParticles(edge, source, target);
+    }
+  });
 
   // Criar nodes
   nodes.forEach((node) => {
     const nodeContainer = createNode(node, nodes);
-    graphContainer.addChild(nodeContainer);
+    nodesContainer.addChild(nodeContainer);
     nodeGraphics.set(node.id, nodeContainer);
   });
 
   centerGraphInView();
   applyZoom(currentZoom, new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2));
 
-  // Animação de entrada
   animateEntrance(nodes);
 }
 
-function drawEdges(edges, nodes) {
-  edgeLayer.clear();
+// ============================================
+// LOOP DE ANIMAÇÃO
+// ============================================
+function animate(ticker) {
+  time += ticker.deltaTime * 0.016;
 
-  edges.forEach((edge) => {
-    const source = nodes.find((n) => n.id === edge.source);
-    const target = nodes.find((n) => n.id === edge.target);
-    if (source && target) {
-      // Curva bezier suave
-      const midX = (source.x + target.x) / 2;
-      const midY = (source.y + target.y) / 2;
-
-      // Ponto de controle perpendicular à linha
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const curvature = dist * 0.15;
-
-      // Perpendicular
-      const perpX = -dy / dist * curvature;
-      const perpY = dx / dist * curvature;
-
-      const ctrlX = midX + perpX;
-      const ctrlY = midY + perpY;
-
-      // Pixi.js v8: usar setStrokeStyle + stroke()
-      edgeLayer.setStrokeStyle({
-        width: 2.5,
-        color: COLORS.edge,
-        alpha: 0.85,
-        cap: 'round'
-      });
-      edgeLayer.moveTo(source.x, source.y);
-      edgeLayer.quadraticCurveTo(ctrlX, ctrlY, target.x, target.y);
-      edgeLayer.stroke();
+  // Animar estrelas (twinkle)
+  starsContainer.children.forEach(star => {
+    if (star._twinkleSpeed) {
+      star.alpha = star._baseAlpha * (0.5 + 0.5 * Math.sin(time * star._twinkleSpeed + star._twinkleOffset));
     }
   });
+
+  // Desenhar edges
+  drawEdges();
+
+  // Animar partículas nas conexões
+  edgeData.forEach(edge => {
+    const source = nodesData.find(n => n.id === edge.source);
+    const target = nodesData.find(n => n.id === edge.target);
+
+    if (source && target && edge.particles) {
+      edge.particles.forEach(particle => {
+        particle._progress += particle._speed;
+        if (particle._progress > 1) particle._progress = 0;
+
+        // Interpolar posição
+        particle.x = source.x + (target.x - source.x) * particle._progress;
+        particle.y = source.y + (target.y - source.y) * particle._progress;
+
+        // Fade in/out nas pontas
+        const fadeZone = 0.15;
+        if (particle._progress < fadeZone) {
+          particle.alpha = particle._progress / fadeZone;
+        } else if (particle._progress > 1 - fadeZone) {
+          particle.alpha = (1 - particle._progress) / fadeZone;
+        } else {
+          particle.alpha = 0.8;
+        }
+      });
+    }
+  });
+
+  // Pulso suave nos nós
+  nodeGraphics.forEach((container, id) => {
+    const node = nodesData.find(n => n.id === id);
+    if (node && container.children[0]) {
+      const glow = container.children[0];
+      const pulse = Math.sin(time * 2 + node.x * 0.01) * 0.3 + 0.7;
+      if (glow.visible) {
+        glow.alpha = 0.15 * pulse;
+      }
+    }
+  });
+}
+
+function drawEdges() {
+  // Limpar container de edges
+  edgesContainer.removeChildren();
+
+  const edgeGraphics = new PIXI.Graphics();
+
+  edgeData.forEach((edge) => {
+    const source = nodesData.find((n) => n.id === edge.source);
+    const target = nodesData.find((n) => n.id === edge.target);
+
+    if (source && target) {
+      // Glow externo
+      edgeGraphics.setStrokeStyle({
+        width: 4,
+        color: COLORS.edge,
+        alpha: 0.12,
+        cap: 'round'
+      });
+      edgeGraphics.moveTo(source.x, source.y);
+      edgeGraphics.lineTo(target.x, target.y);
+      edgeGraphics.stroke();
+
+      // Linha principal
+      edgeGraphics.setStrokeStyle({
+        width: 1.5,
+        color: COLORS.edge,
+        alpha: 0.5,
+        cap: 'round'
+      });
+      edgeGraphics.moveTo(source.x, source.y);
+      edgeGraphics.lineTo(target.x, target.y);
+      edgeGraphics.stroke();
+    }
+  });
+
+  edgesContainer.addChild(edgeGraphics);
 }
 
 function createFolderIcon(color, isRoot) {
   const icon = new PIXI.Graphics();
   const scale = isRoot ? 1.2 : 0.8;
 
-  // Desenhar pasta com aba
-  icon.lineStyle({ width: 1.5, color: color, alpha: 1 });
+  icon.setStrokeStyle({ width: 1.5, color: color, alpha: 1 });
   icon.beginFill(color, 0.3);
-
-  // Corpo da pasta
   icon.drawRoundedRect(-8 * scale, -4 * scale, 16 * scale, 10 * scale, 1.5 * scale);
-
-  // Aba da pasta (superior esquerda)
   icon.endFill();
+
   icon.beginFill(color, 0.5);
   icon.drawRoundedRect(-8 * scale, -6 * scale, 8 * scale, 3 * scale, 1 * scale);
   icon.endFill();
@@ -227,40 +403,38 @@ function createFileIcon(color, isRoot) {
   const icon = new PIXI.Graphics();
   const scale = isRoot ? 1.0 : 0.7;
 
-  // Desenhar documento com canto dobrado
-  icon.lineStyle({ width: 1.5, color: color, alpha: 1 });
-  icon.beginFill(color, 0.3);
-
-  // Corpo do documento
   const width = 10 * scale;
   const height = 12 * scale;
   const foldSize = 3 * scale;
 
+  icon.setStrokeStyle({ width: 1.5, color: color, alpha: 1 });
+  icon.beginFill(color, 0.3);
   icon.moveTo(-width/2, -height/2);
   icon.lineTo(width/2 - foldSize, -height/2);
   icon.lineTo(width/2, -height/2 + foldSize);
   icon.lineTo(width/2, height/2);
   icon.lineTo(-width/2, height/2);
   icon.lineTo(-width/2, -height/2);
-  icon.endFill();
+  icon.fill();
 
   // Canto dobrado
-  icon.lineStyle({ width: 1.5, color: color, alpha: 1 });
   icon.beginFill(color, 0.6);
   icon.moveTo(width/2 - foldSize, -height/2);
   icon.lineTo(width/2 - foldSize, -height/2 + foldSize);
   icon.lineTo(width/2, -height/2 + foldSize);
   icon.lineTo(width/2 - foldSize, -height/2);
-  icon.endFill();
+  icon.fill();
 
-  // Linhas do texto (detalhes)
-  icon.lineStyle({ width: 1, color: color, alpha: 0.5 });
+  // Linhas do texto
+  icon.setStrokeStyle({ width: 1, color: color, alpha: 0.5 });
   const lineY1 = -height/2 + 5 * scale;
   const lineY2 = -height/2 + 7.5 * scale;
   icon.moveTo(-width/2 + 2 * scale, lineY1);
   icon.lineTo(width/2 - 2 * scale, lineY1);
+  icon.stroke();
   icon.moveTo(-width/2 + 2 * scale, lineY2);
   icon.lineTo(width/2 - 2 * scale, lineY2);
+  icon.stroke();
 
   return icon;
 }
@@ -273,35 +447,49 @@ function createNode(node, allNodes) {
 
   const isRoot = node.depth === 0;
   const isDirectory = node.type === 'directory';
-
-  // Tamanho baseado no tipo
   const baseRadius = isRoot ? 35 : (isDirectory ? 22 : 14);
-
-  // Cor baseada no tipo
   const color = isRoot ? COLORS.rootNode : (isDirectory ? COLORS.directory : COLORS.file);
 
-  // Glow effect (círculo maior e mais transparente)
-  const glow = new PIXI.Graphics();
-  glow.beginFill(color, 0.15);
-  glow.drawCircle(0, 0, baseRadius + 12);
-  glow.endFill();
-  glow.visible = isRoot;
-  container.addChild(glow);
+  // Glow externo
+  const outerGlow = new PIXI.Graphics();
+  outerGlow.beginFill(color, 0.15);
+  outerGlow.drawCircle(0, 0, baseRadius * 2.5);
+  outerGlow.endFill();
+  outerGlow.visible = isRoot;
+  container.addChild(outerGlow);
+  container._outerGlow = outerGlow;
 
-  // Círculo externo (borda)
-  const outerCircle = new PIXI.Graphics();
-  outerCircle.lineStyle({ width: 2, color: color, alpha: 0.8 });
-  outerCircle.drawCircle(0, 0, baseRadius);
-  container.addChild(outerCircle);
+  // Glow interno
+  const innerGlow = new PIXI.Graphics();
+  innerGlow.beginFill(color, 0.25);
+  innerGlow.drawCircle(0, 0, baseRadius * 1.5);
+  innerGlow.endFill();
+  container.addChild(innerGlow);
+  container._innerGlow = innerGlow;
 
-  // Círculo interno (preenchimento)
-  const innerCircle = new PIXI.Graphics();
-  innerCircle.beginFill(color, 0.25);
-  innerCircle.drawCircle(0, 0, baseRadius - 2);
-  innerCircle.endFill();
-  container.addChild(innerCircle);
+  // Círculo principal
+  const body = new PIXI.Graphics();
+  body.beginFill(color, 0.5);
+  body.drawCircle(0, 0, baseRadius);
+  body.endFill();
+  body.beginFill(0xffffff, 0.15);
+  body.drawCircle(0, -baseRadius * 0.2, baseRadius * 0.7);
+  body.endFill();
+  body.beginFill(0xffffff, 0.6);
+  body.drawCircle(0, 0, baseRadius * 0.25);
+  body.endFill();
+  container.addChild(body);
+  container._body = body;
 
-  // Ícone no centro
+  // Anel dourado
+  const ring = new PIXI.Graphics();
+  ring.setStrokeStyle({ width: 1.5, color: COLORS.edge, alpha: 0.6 });
+  ring.drawCircle(0, 0, baseRadius + 2);
+  ring.stroke();
+  container.addChild(ring);
+  container._ring = ring;
+
+  // Ícone
   const iconGraphic = isDirectory ? createFolderIcon(color, isRoot) : createFileIcon(color, isRoot);
   container.addChild(iconGraphic);
 
@@ -311,15 +499,17 @@ function createNode(node, allNodes) {
     style: {
       fontFamily: 'Segoe UI, Arial, sans-serif',
       fontSize: isRoot ? 14 : 11,
-      fill: isRoot ? COLORS.text : COLORS.textMuted,
-      fontWeight: isRoot ? 'bold' : 'normal'
+      fill: COLORS.text,
+      align: 'center'
     }
   });
   label.anchor.set(0.5, 0);
-  label.y = baseRadius + 8;
+  label.y = baseRadius + 10;
+  label.alpha = 0.8;
   container.addChild(label);
+  container._label = label;
 
-  // Badge de contagem para diretórios
+  // Badges
   if (isDirectory && node.childCount > 0) {
     const badge = createBadge(node.childCount);
     badge.x = baseRadius - 5;
@@ -327,7 +517,6 @@ function createNode(node, allNodes) {
     container.addChild(badge);
   }
 
-  // Badge para diretórios colapsados (conteúdo oculto)
   const totalHidden = (node.hiddenFilesCount || 0) + (node.hiddenDirsCount || 0);
   if (isDirectory && totalHidden > 0) {
     const hiddenBadge = createHiddenBadge(totalHidden, node.collapsed);
@@ -340,35 +529,38 @@ function createNode(node, allNodes) {
   container.eventMode = 'static';
   container.cursor = 'pointer';
 
-  // Hover effects
   container.on('pointerover', () => {
-    glow.visible = true;
-    container.scale.set(1.15);
-    label.style.fill = COLORS.text;
+    container._outerGlow.visible = true;
+    container._outerGlow.alpha = 0.4;
+    container.scale.set(1.1);
+    container._label.alpha = 1;
+    container._ring.alpha = 1;
   });
 
   container.on('pointerout', () => {
     if (!isRoot && selectedNode?.id !== node.id) {
-      glow.visible = false;
+      container._outerGlow.visible = false;
     }
     if (selectedNode?.id !== node.id) {
       container.scale.set(1);
-      label.style.fill = isRoot ? COLORS.text : COLORS.textMuted;
+      container._label.alpha = 0.8;
+      container._ring.alpha = 0.6;
     }
   });
 
   container.on('pointertap', () => {
-    // Desselecionar anterior
     if (selectedNode && nodeGraphics.has(selectedNode.id)) {
       const prevContainer = nodeGraphics.get(selectedNode.id);
       const prevIsRoot = selectedNode.depth === 0;
       prevContainer.scale.set(1);
-      prevContainer.children[0].visible = prevIsRoot;
+      prevContainer._outerGlow.visible = prevIsRoot;
+      prevContainer._ring.alpha = 0.6;
     }
 
     selectedNode = node;
-    container.scale.set(1.15);
-    glow.visible = true;
+    container.scale.set(1.1);
+    container._outerGlow.visible = true;
+    container._ring.alpha = 1;
     renderDetails(node);
   });
 
@@ -379,7 +571,7 @@ function createBadge(count) {
   const badge = new PIXI.Container();
 
   const bg = new PIXI.Graphics();
-  bg.beginFill(0x1e293b, 0.9);
+  bg.beginFill(0x1a1a2e, 0.9);
   bg.drawRoundedRect(-10, -8, 20, 16, 8);
   bg.endFill();
   badge.addChild(bg);
@@ -400,9 +592,7 @@ function createBadge(count) {
 
 function createHiddenBadge(count, isCollapsed) {
   const badge = new PIXI.Container();
-
-  // Cor diferente para colapsados (laranja) vs apenas arquivos ocultos (roxo)
-  const bgColor = isCollapsed ? 0xf59e0b : 0x7c3aed;
+  const bgColor = isCollapsed ? 0xc9a227 : COLORS.directory;
 
   const bg = new PIXI.Graphics();
   bg.beginFill(bgColor, 0.9);
@@ -437,7 +627,6 @@ function animateEntrance(nodes) {
       container.alpha = 0;
       container.scale.set(0.5);
 
-      // Animação escalonada
       const delay = node.depth * 80 + index * 15;
       setTimeout(() => {
         animateTo(container, { alpha: 1, scaleX: 1, scaleY: 1 }, 400);
@@ -459,8 +648,6 @@ function animateTo(target, props, duration) {
   function update() {
     const elapsed = Date.now() - startTime;
     const progress = Math.min(elapsed / duration, 1);
-
-    // Easing: ease-out cubic
     const eased = 1 - Math.pow(1 - progress, 3);
 
     for (const key in props) {
@@ -482,35 +669,31 @@ function animateTo(target, props, duration) {
 }
 
 function centerGraphInView() {
-  if (!app || !graphContainer) return;
+  if (!app || !worldContainer) return;
 
-  const bounds = graphContainer.getBounds();
+  const bounds = nodesContainer.getBounds();
   const contentCenterX = bounds.x + bounds.width / 2;
   const contentCenterY = bounds.y + bounds.height / 2;
 
   const targetX = app.renderer.width / 2;
   const targetY = app.renderer.height / 2;
 
-  graphContainer.position.x += targetX - contentCenterX;
-  graphContainer.position.y += targetY - contentCenterY;
+  worldContainer.position.x += targetX - contentCenterX;
+  worldContainer.position.y += targetY - contentCenterY;
 }
 
 function applyZoom(targetZoom, anchor) {
-  if (!app || !graphContainer) return;
+  if (!app || !worldContainer) return;
 
   const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, targetZoom));
   const zoomAnchor = anchor ?? new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2);
-  const worldPosition = graphContainer.toLocal(zoomAnchor);
+  const worldPosition = worldContainer.toLocal(zoomAnchor);
 
-  graphContainer.scale.set(clampedZoom);
-  const newScreenPosition = graphContainer.toGlobal(worldPosition);
-  graphContainer.position.x += zoomAnchor.x - newScreenPosition.x;
-  graphContainer.position.y += zoomAnchor.y - newScreenPosition.y;
+  worldContainer.scale.set(clampedZoom);
+  const newScreenPosition = worldContainer.toGlobal(worldPosition);
+  worldContainer.position.x += zoomAnchor.x - newScreenPosition.x;
+  worldContainer.position.y += zoomAnchor.y - newScreenPosition.y;
 
-  const bounds = graphContainer.getBounds();
-  if (bounds.width < app.renderer.width || bounds.height < app.renderer.height) {
-    centerGraphInView();
-  }
   currentZoom = clampedZoom;
 }
 
@@ -548,8 +731,8 @@ function setupPanControls() {
     const dx = event.clientX - lastPosition.x;
     const dy = event.clientY - lastPosition.y;
 
-    graphContainer.position.x += dx;
-    graphContainer.position.y += dy;
+    worldContainer.position.x += dx;
+    worldContainer.position.y += dy;
 
     lastPosition = { x: event.clientX, y: event.clientY };
   });
@@ -566,7 +749,7 @@ function renderDetails(node) {
   title.textContent = node.name;
   const type = document.createElement('div');
   type.className = 'type';
-  type.textContent = node.type;
+  type.textContent = node.type === 'directory' ? 'PASTA' : 'ARQUIVO';
   const path = document.createElement('p');
   path.className = 'path';
   path.textContent = node.id;
@@ -575,14 +758,13 @@ function renderDetails(node) {
   details.appendChild(type);
   details.appendChild(path);
 
-  // Mostrar info de conteúdo oculto para diretórios
   if (node.type === 'directory') {
     const hiddenDirs = node.hiddenDirsCount || 0;
     const hiddenFiles = node.hiddenFilesCount || 0;
 
     if (node.collapsed && (hiddenDirs > 0 || hiddenFiles > 0)) {
       const collapsedInfo = document.createElement('p');
-      collapsedInfo.style.color = '#fbbf24';
+      collapsedInfo.style.color = '#c9a227';
       collapsedInfo.style.fontSize = '12px';
       collapsedInfo.style.marginTop = '8px';
       const parts = [];
@@ -592,7 +774,7 @@ function renderDetails(node) {
       details.appendChild(collapsedInfo);
     } else if (hiddenFiles > 0) {
       const hiddenInfo = document.createElement('p');
-      hiddenInfo.style.color = '#a78bfa';
+      hiddenInfo.style.color = '#6488a8';
       hiddenInfo.style.fontSize = '12px';
       hiddenInfo.style.marginTop = '8px';
       hiddenInfo.textContent = `+${hiddenFiles} arquivos ocultos (${node.totalFilesCount} total)`;

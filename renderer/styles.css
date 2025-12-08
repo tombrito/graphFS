@@ -4,31 +4,46 @@
 
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
-  background: #0d1117;
-  color: #e6edf3;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #000008;
+  color: #c9b77d;
 }
 
 header {
   padding: 16px 24px;
-  background: #111827;
-  border-bottom: 1px solid #1f2937;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 100%);
+  border-bottom: 1px solid rgba(201, 183, 125, 0.2);
 }
 
 h1 {
   margin: 0 0 4px 0;
   font-size: 22px;
+  color: #c9b77d;
+  text-shadow: 0 0 20px rgba(201, 183, 125, 0.3);
+  letter-spacing: 2px;
+}
+
+h2, h3 {
+  color: #c9b77d;
+  letter-spacing: 1px;
 }
 
 .subtitle {
   margin: 0;
-  color: #9ca3af;
+  color: rgba(201, 183, 125, 0.6);
 }
 
 .hint {
   margin: 6px 0 0;
-  color: #6b7280;
+  color: rgba(201, 183, 125, 0.4);
   font-size: 13px;
+}
+
+.hint code {
+  background: rgba(201, 183, 125, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #c9b77d;
 }
 
 main {
@@ -39,20 +54,20 @@ main {
 section.left {
   flex: 2;
   padding: 16px;
-  border-right: 1px solid #1f2937;
+  border-right: 1px solid rgba(201, 183, 125, 0.15);
 }
 
 section.right {
   flex: 1;
   padding: 16px;
   overflow-y: auto;
-  background: #0f172a;
+  background: linear-gradient(to left, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 100%);
 }
 
 #pixi-container {
   height: 100%;
-  background: #0b1220;
-  border: 1px solid #1f2937;
+  background: #000008;
+  border: 1px solid rgba(201, 183, 125, 0.2);
   border-radius: 8px;
 }
 
@@ -63,62 +78,91 @@ section.right {
 }
 
 .badge {
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 4px 12px;
+  border-radius: 4px;
   font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
   border: 1px solid transparent;
 }
 
 .badge.directory {
-  background: rgba(56, 189, 248, 0.15);
-  border-color: rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
+  background: rgba(100, 136, 168, 0.15);
+  border-color: rgba(100, 136, 168, 0.4);
+  color: #6488a8;
 }
 
 .badge.file {
-  background: rgba(96, 165, 250, 0.15);
-  border-color: rgba(96, 165, 250, 0.4);
-  color: #60a5fa;
+  background: rgba(139, 154, 107, 0.15);
+  border-color: rgba(139, 154, 107, 0.4);
+  color: #8b9a6b;
 }
 
 .badge.fallback {
-  background: rgba(248, 180, 0, 0.15);
-  border-color: rgba(248, 180, 0, 0.4);
-  color: #f8b400;
+  background: rgba(201, 183, 125, 0.15);
+  border-color: rgba(201, 183, 125, 0.4);
+  color: #c9b77d;
 }
 
 #details p {
   margin-top: 0;
-  color: #cbd5e1;
+  color: rgba(201, 183, 125, 0.8);
+}
+
+#details h3 {
+  font-size: 1.1rem;
+  margin-bottom: 8px;
 }
 
 #tree-view {
   margin-top: 12px;
-  font-family: "Fira Code", monospace;
+  font-family: "Fira Code", "Consolas", monospace;
   white-space: pre;
-  background: #0b1220;
-  border: 1px solid #1f2937;
+  background: rgba(0, 0, 8, 0.8);
+  border: 1px solid rgba(201, 183, 125, 0.15);
   border-radius: 8px;
   padding: 12px;
-  color: #e5e7eb;
+  color: rgba(201, 183, 125, 0.7);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .tree-dir {
-  color: #38bdf8;
+  color: #6488a8;
 }
 
 .tree-file {
-  color: #60a5fa;
+  color: #8b9a6b;
 }
 
 #details .path {
-  color: #a5b4fc;
+  color: rgba(201, 183, 125, 0.6);
   word-break: break-all;
+  font-size: 12px;
 }
 
 #details .type {
   text-transform: uppercase;
-  font-size: 12px;
-  letter-spacing: 0.05em;
-  color: #94a3b8;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: rgba(201, 183, 125, 0.5);
+  margin-bottom: 8px;
+}
+
+/* Scrollbar estilizada */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 8, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 183, 125, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 183, 125, 0.5);
 }
