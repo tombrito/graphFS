@@ -153,6 +153,17 @@ function applyZoom(targetZoom, anchor) {
   const newScreenPosition = app.stage.toGlobal(worldPosition);
   app.stage.position.x += zoomAnchor.x - newScreenPosition.x;
   app.stage.position.y += zoomAnchor.y - newScreenPosition.y;
+
+  const bounds = app.stage.getBounds();
+  const contentCenterX = bounds.x + bounds.width / 2;
+  const contentCenterY = bounds.y + bounds.height / 2;
+
+  if (bounds.width < app.renderer.width) {
+    app.stage.position.x += app.renderer.width / 2 - contentCenterX;
+  }
+  if (bounds.height < app.renderer.height) {
+    app.stage.position.y += app.renderer.height / 2 - contentCenterY;
+  }
   currentZoom = clampedZoom;
 }
 
