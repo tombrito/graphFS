@@ -20,4 +20,13 @@ Consulte o [`backlog.md`](backlog.md) para priorizar o desenvolvimento das featu
 2. (Opcional) Ajuste o caminho de origem definindo `GRAPHFS_ROOT` (por padrão `C:\\tmp`).
 3. Execute `npm start` para abrir a janela Electron e ver o grafo com os arquivos do diretório alvo.
 
+Comandos correspondentes:
+
+```bash
+npm install
+# Opcional, altere o diretório alvo (exemplo em Windows)
+set GRAPHFS_ROOT=C:\tmp
+npm start
+```
+
 A UI mostra o grafo à esquerda (nós de pastas/arquivos com linhas de hierarquia) e, à direita, detalhes do nó selecionado e uma árvore textual completa.
