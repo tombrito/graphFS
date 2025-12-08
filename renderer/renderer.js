@@ -7,6 +7,10 @@ const details = document.getElementById('details');
 const fallbackBadge = document.getElementById('fallback-badge');
 
 let app;
+let graphContainer;
+let currentZoom = 0.85;
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 2.5;
 let selectedNode = null;
 
 async function bootstrap() {
@@ -24,6 +28,7 @@ async function bootstrap() {
   flattenTree(tree, null, 0, nodes, edges);
   layoutNodes(nodes);
   await buildPixiApp(nodes, edges);
+  setupZoomControls();
   renderTree(tree);
 }
 
@@ -78,6 +83,9 @@ async function buildPixiApp(nodes, edges) {
   pixiContainer.innerHTML = '';
   pixiContainer.appendChild(app.canvas);
 
+  graphContainer = new PIXI.Container();
+  app.stage.addChild(graphContainer);
+
   const edgeLayer = new PIXI.Graphics();
   edgeLayer.lineStyle({ width: 1, color: 0x1f2937 });
   edges.forEach((edge) => {
@@ -88,7 +96,7 @@ async function buildPixiApp(nodes, edges) {
       edgeLayer.lineTo(target.x, target.y);
     }
   });
-  app.stage.addChild(edgeLayer);
+  graphContainer.addChild(edgeLayer);
 
   nodes.forEach((node) => {
     const circle = new PIXI.Graphics();
@@ -119,9 +127,62 @@ async function buildPixiApp(nodes, edges) {
     label.x = node.x + 20;
     label.y = node.y - 8;
 
-    app.stage.addChild(circle);
-    app.stage.addChild(label);
+    graphContainer.addChild(circle);
+    graphContainer.addChild(label);
   });
+
+  centerGraphInView();
+  applyZoom(currentZoom, new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2));
+}
+
+function centerGraphInView() {
+  if (!app || !graphContainer) return;
+
+  const bounds = graphContainer.getBounds();
+  const contentCenterX = bounds.x + bounds.width / 2;
+  const contentCenterY = bounds.y + bounds.height / 2;
+
+  const targetX = app.renderer.width / 2;
+  const targetY = app.renderer.height / 2;
+
+  graphContainer.position.x += targetX - contentCenterX;
+  graphContainer.position.y += targetY - contentCenterY;
+}
+
+function applyZoom(targetZoom, anchor) {
+  if (!app || !graphContainer) return;
+
+  const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, targetZoom));
+  const zoomAnchor = anchor ?? new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2);
+  const worldPosition = graphContainer.toLocal(zoomAnchor);
+
+  graphContainer.scale.set(clampedZoom);
+  const newScreenPosition = graphContainer.toGlobal(worldPosition);
+  graphContainer.position.x += zoomAnchor.x - newScreenPosition.x;
+  graphContainer.position.y += zoomAnchor.y - newScreenPosition.y;
+
+  const bounds = graphContainer.getBounds();
+  if (bounds.width < app.renderer.width || bounds.height < app.renderer.height) {
+    centerGraphInView();
+  }
+  currentZoom = clampedZoom;
+}
+
+function setupZoomControls() {
+  pixiContainer.addEventListener(
+    'wheel',
+    (event) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+
+      const rect = pixiContainer.getBoundingClientRect();
+      const pointer = new PIXI.Point(event.clientX - rect.left, event.clientY - rect.top);
+      const direction = event.deltaY > 0 ? -1 : 1;
+      const factor = 1 + direction * 0.12;
+      applyZoom(currentZoom * factor, pointer);
+    },
+    { passive: false }
+  );
 }
 
 function renderDetails(node) {
