@@ -23,6 +23,10 @@ let edgeData = [];
 let nodesData = [];
 let time = 0;
 
+// Controles de animação
+let bgAnimEnabled = true;
+let lineAnimEnabled = true;
+
 // Paleta de cores estilo constellation (dourado sobre preto)
 const COLORS = {
   background: 0x000008,
@@ -62,6 +66,31 @@ async function bootstrap() {
 
   // Iniciar loop de animação
   app.ticker.add(animate);
+
+  // Setup controles de animação
+  setupAnimationControls();
+}
+
+function setupAnimationControls() {
+  const bgToggle = document.getElementById('toggle-bg-anim');
+  const lineToggle = document.getElementById('toggle-line-anim');
+
+  if (bgToggle) {
+    bgToggle.addEventListener('change', (e) => {
+      bgAnimEnabled = e.target.checked;
+      // Mostrar/ocultar fundo animado
+      starsContainer.visible = bgAnimEnabled;
+      nebulaContainer.visible = bgAnimEnabled;
+    });
+  }
+
+  if (lineToggle) {
+    lineToggle.addEventListener('change', (e) => {
+      lineAnimEnabled = e.target.checked;
+      // Mostrar/ocultar partículas
+      particlesContainer.visible = lineAnimEnabled;
+    });
+  }
 }
 
 function renderNotice(message) {
@@ -295,42 +324,46 @@ async function buildPixiApp(nodes, edges) {
 function animate(ticker) {
   time += ticker.deltaTime * 0.016;
 
-  // Animar estrelas (twinkle)
-  starsContainer.children.forEach(star => {
-    if (star._twinkleSpeed) {
-      star.alpha = star._baseAlpha * (0.5 + 0.5 * Math.sin(time * star._twinkleSpeed + star._twinkleOffset));
-    }
-  });
+  // Animar estrelas (twinkle) - apenas se habilitado
+  if (bgAnimEnabled) {
+    starsContainer.children.forEach(star => {
+      if (star._twinkleSpeed) {
+        star.alpha = star._baseAlpha * (0.5 + 0.5 * Math.sin(time * star._twinkleSpeed + star._twinkleOffset));
+      }
+    });
+  }
 
   // Desenhar edges
   drawEdges();
 
-  // Animar partículas nas conexões
-  edgeData.forEach(edge => {
-    const source = nodesData.find(n => n.id === edge.source);
-    const target = nodesData.find(n => n.id === edge.target);
+  // Animar partículas nas conexões - apenas se habilitado
+  if (lineAnimEnabled) {
+    edgeData.forEach(edge => {
+      const source = nodesData.find(n => n.id === edge.source);
+      const target = nodesData.find(n => n.id === edge.target);
 
-    if (source && target && edge.particles) {
-      edge.particles.forEach(particle => {
-        particle._progress += particle._speed;
-        if (particle._progress > 1) particle._progress = 0;
+      if (source && target && edge.particles) {
+        edge.particles.forEach(particle => {
+          particle._progress += particle._speed;
+          if (particle._progress > 1) particle._progress = 0;
 
-        // Interpolar posição
-        particle.x = source.x + (target.x - source.x) * particle._progress;
-        particle.y = source.y + (target.y - source.y) * particle._progress;
+          // Interpolar posição
+          particle.x = source.x + (target.x - source.x) * particle._progress;
+          particle.y = source.y + (target.y - source.y) * particle._progress;
 
-        // Fade in/out nas pontas
-        const fadeZone = 0.15;
-        if (particle._progress < fadeZone) {
-          particle.alpha = particle._progress / fadeZone;
-        } else if (particle._progress > 1 - fadeZone) {
-          particle.alpha = (1 - particle._progress) / fadeZone;
-        } else {
-          particle.alpha = 0.8;
-        }
-      });
-    }
-  });
+          // Fade in/out nas pontas
+          const fadeZone = 0.15;
+          if (particle._progress < fadeZone) {
+            particle.alpha = particle._progress / fadeZone;
+          } else if (particle._progress > 1 - fadeZone) {
+            particle.alpha = (1 - particle._progress) / fadeZone;
+          } else {
+            particle.alpha = 0.8;
+          }
+        });
+      }
+    });
+  }
 
   // Pulso suave nos nós
   nodeGraphics.forEach((container, id) => {
