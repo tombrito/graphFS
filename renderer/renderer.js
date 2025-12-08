@@ -67,6 +67,23 @@ function layoutNodes(nodes) {
     node.x = 140 + node.depth * 180;
     node.y = 60 + count * 80;
   });
+
+  // Centralizar as coordenadas em torno da origem (0,0)
+  // para que o zoom seja aplicado em torno do centro do grafo
+  if (nodes.length > 0) {
+    const minX = Math.min(...nodes.map(n => n.x));
+    const maxX = Math.max(...nodes.map(n => n.x));
+    const minY = Math.min(...nodes.map(n => n.y));
+    const maxY = Math.max(...nodes.map(n => n.y));
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    nodes.forEach((node) => {
+      node.x -= centerX;
+      node.y -= centerY;
+    });
+  }
 }
 
 async function buildPixiApp(nodes, edges) {
@@ -175,11 +192,11 @@ function setupZoomControls() {
       if (!event.ctrlKey) return;
       event.preventDefault();
 
-      const rect = pixiContainer.getBoundingClientRect();
-      const pointer = new PIXI.Point(event.clientX - rect.left, event.clientY - rect.top);
+      // Sempre fazer zoom centralizado (no centro da tela)
+      const centerPoint = new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2);
       const direction = event.deltaY > 0 ? -1 : 1;
       const factor = 1 + direction * 0.12;
-      applyZoom(currentZoom * factor, pointer);
+      applyZoom(currentZoom * factor, centerPoint);
     },
     { passive: false }
   );
