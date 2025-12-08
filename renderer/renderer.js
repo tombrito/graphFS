@@ -7,6 +7,7 @@ const details = document.getElementById('details');
 const fallbackBadge = document.getElementById('fallback-badge');
 
 let app;
+let graphContainer;
 let currentZoom = 0.85;
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 2.5;
@@ -82,6 +83,9 @@ async function buildPixiApp(nodes, edges) {
   pixiContainer.innerHTML = '';
   pixiContainer.appendChild(app.canvas);
 
+  graphContainer = new PIXI.Container();
+  app.stage.addChild(graphContainer);
+
   const edgeLayer = new PIXI.Graphics();
   edgeLayer.lineStyle({ width: 1, color: 0x1f2937 });
   edges.forEach((edge) => {
@@ -92,7 +96,7 @@ async function buildPixiApp(nodes, edges) {
       edgeLayer.lineTo(target.x, target.y);
     }
   });
-  app.stage.addChild(edgeLayer);
+  graphContainer.addChild(edgeLayer);
 
   nodes.forEach((node) => {
     const circle = new PIXI.Graphics();
@@ -123,46 +127,43 @@ async function buildPixiApp(nodes, edges) {
     label.x = node.x + 20;
     label.y = node.y - 8;
 
-    app.stage.addChild(circle);
-    app.stage.addChild(label);
+    graphContainer.addChild(circle);
+    graphContainer.addChild(label);
   });
 
-  centerStageOnContent();
+  centerGraphInView();
   applyZoom(currentZoom, new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2));
 }
 
-function centerStageOnContent() {
-  if (!app) return;
+function centerGraphInView() {
+  if (!app || !graphContainer) return;
 
-  const bounds = app.stage.getBounds();
-  const centerX = bounds.x + bounds.width / 2;
-  const centerY = bounds.y + bounds.height / 2;
-
-  app.stage.pivot.set(centerX, centerY);
-  app.stage.position.set(app.renderer.width / 2, app.renderer.height / 2);
-}
-
-function applyZoom(targetZoom, anchor) {
-  if (!app) return;
-
-  const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, targetZoom));
-  const zoomAnchor = anchor ?? new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2);
-  const worldPosition = app.stage.toLocal(zoomAnchor);
-
-  app.stage.scale.set(clampedZoom);
-  const newScreenPosition = app.stage.toGlobal(worldPosition);
-  app.stage.position.x += zoomAnchor.x - newScreenPosition.x;
-  app.stage.position.y += zoomAnchor.y - newScreenPosition.y;
-
-  const bounds = app.stage.getBounds();
+  const bounds = graphContainer.getBounds();
   const contentCenterX = bounds.x + bounds.width / 2;
   const contentCenterY = bounds.y + bounds.height / 2;
 
-  if (bounds.width < app.renderer.width) {
-    app.stage.position.x += app.renderer.width / 2 - contentCenterX;
-  }
-  if (bounds.height < app.renderer.height) {
-    app.stage.position.y += app.renderer.height / 2 - contentCenterY;
+  const targetX = app.renderer.width / 2;
+  const targetY = app.renderer.height / 2;
+
+  graphContainer.position.x += targetX - contentCenterX;
+  graphContainer.position.y += targetY - contentCenterY;
+}
+
+function applyZoom(targetZoom, anchor) {
+  if (!app || !graphContainer) return;
+
+  const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, targetZoom));
+  const zoomAnchor = anchor ?? new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2);
+  const worldPosition = graphContainer.toLocal(zoomAnchor);
+
+  graphContainer.scale.set(clampedZoom);
+  const newScreenPosition = graphContainer.toGlobal(worldPosition);
+  graphContainer.position.x += zoomAnchor.x - newScreenPosition.x;
+  graphContainer.position.y += zoomAnchor.y - newScreenPosition.y;
+
+  const bounds = graphContainer.getBounds();
+  if (bounds.width < app.renderer.width || bounds.height < app.renderer.height) {
+    centerGraphInView();
   }
   currentZoom = clampedZoom;
 }
