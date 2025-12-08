@@ -202,6 +202,68 @@ function drawEdges(edges, nodes) {
   });
 }
 
+function createFolderIcon(color, isRoot) {
+  const icon = new PIXI.Graphics();
+  const scale = isRoot ? 1.2 : 0.8;
+
+  // Desenhar pasta com aba
+  icon.lineStyle({ width: 1.5, color: color, alpha: 1 });
+  icon.beginFill(color, 0.3);
+
+  // Corpo da pasta
+  icon.drawRoundedRect(-8 * scale, -4 * scale, 16 * scale, 10 * scale, 1.5 * scale);
+
+  // Aba da pasta (superior esquerda)
+  icon.endFill();
+  icon.beginFill(color, 0.5);
+  icon.drawRoundedRect(-8 * scale, -6 * scale, 8 * scale, 3 * scale, 1 * scale);
+  icon.endFill();
+
+  return icon;
+}
+
+function createFileIcon(color, isRoot) {
+  const icon = new PIXI.Graphics();
+  const scale = isRoot ? 1.0 : 0.7;
+
+  // Desenhar documento com canto dobrado
+  icon.lineStyle({ width: 1.5, color: color, alpha: 1 });
+  icon.beginFill(color, 0.3);
+
+  // Corpo do documento
+  const width = 10 * scale;
+  const height = 12 * scale;
+  const foldSize = 3 * scale;
+
+  icon.moveTo(-width/2, -height/2);
+  icon.lineTo(width/2 - foldSize, -height/2);
+  icon.lineTo(width/2, -height/2 + foldSize);
+  icon.lineTo(width/2, height/2);
+  icon.lineTo(-width/2, height/2);
+  icon.lineTo(-width/2, -height/2);
+  icon.endFill();
+
+  // Canto dobrado
+  icon.lineStyle({ width: 1.5, color: color, alpha: 1 });
+  icon.beginFill(color, 0.6);
+  icon.moveTo(width/2 - foldSize, -height/2);
+  icon.lineTo(width/2 - foldSize, -height/2 + foldSize);
+  icon.lineTo(width/2, -height/2 + foldSize);
+  icon.lineTo(width/2 - foldSize, -height/2);
+  icon.endFill();
+
+  // Linhas do texto (detalhes)
+  icon.lineStyle({ width: 1, color: color, alpha: 0.5 });
+  const lineY1 = -height/2 + 5 * scale;
+  const lineY2 = -height/2 + 7.5 * scale;
+  icon.moveTo(-width/2 + 2 * scale, lineY1);
+  icon.lineTo(width/2 - 2 * scale, lineY1);
+  icon.moveTo(-width/2 + 2 * scale, lineY2);
+  icon.lineTo(width/2 - 2 * scale, lineY2);
+
+  return icon;
+}
+
 function createNode(node, allNodes) {
   const container = new PIXI.Container();
   container.x = node.x;
@@ -239,16 +301,8 @@ function createNode(node, allNodes) {
   container.addChild(innerCircle);
 
   // Ícone no centro
-  const icon = new PIXI.Text({
-    text: isRoot ? '◉' : (isDirectory ? '▪' : '•'),
-    style: {
-      fontFamily: 'Arial',
-      fontSize: isRoot ? 20 : (isDirectory ? 14 : 10),
-      fill: color
-    }
-  });
-  icon.anchor.set(0.5);
-  container.addChild(icon);
+  const iconGraphic = isDirectory ? createFolderIcon(color, isRoot) : createFileIcon(color, isRoot);
+  container.addChild(iconGraphic);
 
   // Label
   const label = new PIXI.Text({
