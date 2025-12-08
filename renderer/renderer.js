@@ -127,7 +127,19 @@ async function buildPixiApp(nodes, edges) {
     app.stage.addChild(label);
   });
 
+  centerStageOnContent();
   applyZoom(currentZoom, new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2));
+}
+
+function centerStageOnContent() {
+  if (!app) return;
+
+  const bounds = app.stage.getBounds();
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+
+  app.stage.pivot.set(centerX, centerY);
+  app.stage.position.set(app.renderer.width / 2, app.renderer.height / 2);
 }
 
 function applyZoom(targetZoom, anchor) {
