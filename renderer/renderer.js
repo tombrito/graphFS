@@ -1,7 +1,7 @@
 // Orquestrador principal - importa e coordena os módulos
 
 import { COLORS, updateMtimeRange } from './colors.js';
-import { flattenTree, layoutNodesRadial } from './graph-layout.js';
+import { flattenTree, layoutNodesForce } from './graph-layout.js';
 import { createNode } from './nodes.js';
 import { createStarfield, createNebula, createEdgeParticles, animateEntrance, createAnimationLoop } from './effects.js';
 import { createPixiApp, centerGraphInView, applyZoom, setupZoomControls, setupPanControls } from './pixi-app.js';
@@ -54,7 +54,7 @@ async function bootstrap() {
   const nodes = [];
   const edges = [];
   flattenTree(tree, null, 0, nodes, edges);
-  layoutNodesRadial(tree, nodes);
+  layoutNodesForce(tree, nodes, edges);
 
   // Calcular min/max mtime para normalização
   updateMtimeRange(nodes);
@@ -148,7 +148,7 @@ async function updateGraph(tree, rootPath) {
   const nodes = [];
   const edges = [];
   flattenTree(tree, null, 0, nodes, edges);
-  layoutNodesRadial(tree, nodes);
+  layoutNodesForce(tree, nodes, edges);
   updateMtimeRange(nodes);
 
   state.nodesData = nodes;

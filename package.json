@@ -11,6 +11,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "d3-force": "^3.0.0",
     "electron": "^31.3.0",
     "pixi.js": "^8.2.1"
   }
