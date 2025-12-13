@@ -121,11 +121,18 @@ export function createEdgeParticles(edge, source, target, particlesContainer) {
 // ============================================
 // DESENHAR EDGES
 // ============================================
-export function drawEdges(edgesContainer, edgeData, nodesData) {
-  // Limpar container de edges
-  edgesContainer.removeChildren();
+// Reutilizar o mesmo Graphics para evitar memory leak
+let cachedEdgeGraphics = null;
 
-  const edgeGraphics = new PIXI.Graphics();
+export function drawEdges(edgesContainer, edgeData, nodesData) {
+  // Criar o Graphics apenas uma vez e reutilizar
+  if (!cachedEdgeGraphics) {
+    cachedEdgeGraphics = new PIXI.Graphics();
+    edgesContainer.addChild(cachedEdgeGraphics);
+  }
+
+  // Limpar o graphics existente (não criar novo)
+  cachedEdgeGraphics.clear();
 
   edgeData.forEach((edge) => {
     const source = nodesData.find((n) => n.id === edge.source);
@@ -146,30 +153,36 @@ export function drawEdges(edgesContainer, edgeData, nodesData) {
       const edgeColor = recency > 0.7 ? COLORS.edgeGlow : COLORS.edge;
 
       // Glow externo
-      edgeGraphics.setStrokeStyle({
+      cachedEdgeGraphics.setStrokeStyle({
         width: glowWidth,
         color: edgeColor,
         alpha: glowAlpha,
         cap: 'round'
       });
-      edgeGraphics.moveTo(source.x, source.y);
-      edgeGraphics.lineTo(target.x, target.y);
-      edgeGraphics.stroke();
+      cachedEdgeGraphics.moveTo(source.x, source.y);
+      cachedEdgeGraphics.lineTo(target.x, target.y);
+      cachedEdgeGraphics.stroke();
 
       // Linha principal
-      edgeGraphics.setStrokeStyle({
+      cachedEdgeGraphics.setStrokeStyle({
         width: lineWidth,
         color: edgeColor,
         alpha: lineAlpha,
         cap: 'round'
       });
-      edgeGraphics.moveTo(source.x, source.y);
-      edgeGraphics.lineTo(target.x, target.y);
-      edgeGraphics.stroke();
+      cachedEdgeGraphics.moveTo(source.x, source.y);
+      cachedEdgeGraphics.lineTo(target.x, target.y);
+      cachedEdgeGraphics.stroke();
     }
   });
+}
 
-  edgesContainer.addChild(edgeGraphics);
+// Resetar cache quando trocar de scan
+export function resetEdgeGraphicsCache() {
+  if (cachedEdgeGraphics) {
+    cachedEdgeGraphics.destroy();
+    cachedEdgeGraphics = null;
+  }
 }
 
 // ============================================

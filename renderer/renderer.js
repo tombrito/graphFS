@@ -3,7 +3,7 @@
 import { COLORS, updateMtimeRange } from './colors.js';
 import { flattenTree, layoutNodesForce } from './graph-layout.js';
 import { createNode } from './nodes.js';
-import { createStarfield, createNebula, createEdgeParticles, animateEntrance, createAnimationLoop } from './effects.js';
+import { createStarfield, createNebula, createEdgeParticles, animateEntrance, createAnimationLoop, resetEdgeGraphicsCache } from './effects.js';
 import { createPixiApp, centerGraphInView, applyZoom, setupZoomControls, setupPanControls } from './pixi-app.js';
 import { renderNotice, renderDetails, renderTree, setupAnimationControls } from './ui.js';
 
@@ -134,6 +134,7 @@ async function renderGraphFromScan(scanResult) {
   state.edgesContainer.removeChildren();
   state.nodeGraphics.clear();
   state.selectedNode = null;
+  resetEdgeGraphicsCache();
 
   // Processa árvore
   const nodes = [];
@@ -294,3 +295,25 @@ function setupScanButtons() {
 
 bootstrap();
 setupScanButtons();
+
+// Monitor de memória na UI
+const memoryBadge = document.getElementById('memory-badge');
+
+async function updateMemoryDisplay() {
+  if (!memoryBadge) return;
+  try {
+    const usage = await window.graphfs.getMemoryUsage();
+    const totalMB = usage.total / 1024 / 1024;
+    memoryBadge.textContent = `${totalMB.toFixed(0)} MB`;
+    if (totalMB > 800) {
+      memoryBadge.classList.add('warning');
+    } else {
+      memoryBadge.classList.remove('warning');
+    }
+  } catch (e) {
+    memoryBadge.textContent = '-- MB';
+  }
+}
+
+setInterval(updateMemoryDisplay, 5000);
+updateMemoryDisplay();

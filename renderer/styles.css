@@ -264,6 +264,21 @@ section.right {
   color: #c9b77d;
 }
 
+.badge.memory {
+  background: rgba(100, 100, 120, 0.15);
+  border-color: rgba(100, 100, 120, 0.4);
+  color: rgba(180, 180, 200, 0.7);
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.badge.memory.warning {
+  background: rgba(229, 115, 115, 0.15);
+  border-color: rgba(229, 115, 115, 0.4);
+  color: #e57373;
+}
+
 #details p {
   margin-top: 0;
   color: rgba(201, 183, 125, 0.8);

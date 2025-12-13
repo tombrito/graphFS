@@ -223,6 +223,19 @@ app.whenReady().then(() => {
   // Handler original para árvore do filesystem (legado)
   ipcMain.handle('fs-tree', () => tryBuildRoot());
 
+  // Handler para memória total de todos os processos
+  ipcMain.handle('system:memory-usage', async () => {
+    const metrics = await app.getAppMetrics();
+    let totalMemory = 0;
+    for (const proc of metrics) {
+      totalMemory += proc.memory.workingSetSize;
+    }
+    return {
+      total: totalMemory * 1024,
+      processCount: metrics.length
+    };
+  });
+
   // === Handlers de persistência ===
 
   // Carrega o último scan salvo
