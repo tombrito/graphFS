@@ -78,13 +78,18 @@ export function setupZoomControls(pixiContainer, app, worldContainer, getZoom, s
   pixiContainer.addEventListener(
     'wheel',
     (event) => {
-      if (!event.ctrlKey) return;
       event.preventDefault();
 
-      const centerPoint = new PIXI.Point(app.renderer.width / 2, app.renderer.height / 2);
+      // Zoom no ponto do mouse para comportamento natural como PDF
+      const rect = pixiContainer.getBoundingClientRect();
+      const mousePoint = new PIXI.Point(
+        event.clientX - rect.left,
+        event.clientY - rect.top
+      );
+
       const direction = event.deltaY > 0 ? -1 : 1;
       const factor = 1 + direction * 0.12;
-      const newZoom = applyZoom(app, worldContainer, getZoom() * factor, centerPoint, getZoom());
+      const newZoom = applyZoom(app, worldContainer, getZoom() * factor, mousePoint, getZoom());
       setZoom(newZoom);
     },
     { passive: false }
@@ -94,12 +99,16 @@ export function setupZoomControls(pixiContainer, app, worldContainer, getZoom, s
 export function setupPanControls(pixiContainer, worldContainer) {
   let isPanning = false;
   let lastPosition = { x: 0, y: 0 };
+  let dragStartPosition = { x: 0, y: 0 };
+  const DRAG_THRESHOLD = 5; // Pixels mínimos para considerar como drag
 
   pixiContainer.addEventListener('mousedown', (event) => {
-    if (event.button === 1 || (event.button === 0 && event.shiftKey)) {
+    // Pan com clique esquerdo, meio ou shift+esquerdo
+    if (event.button === 0 || event.button === 1) {
       isPanning = true;
       lastPosition = { x: event.clientX, y: event.clientY };
-      pixiContainer.style.cursor = 'grabbing';
+      dragStartPosition = { x: event.clientX, y: event.clientY };
+      pixiContainer.style.cursor = 'grab';
     }
   });
 
@@ -108,6 +117,13 @@ export function setupPanControls(pixiContainer, worldContainer) {
 
     const dx = event.clientX - lastPosition.x;
     const dy = event.clientY - lastPosition.y;
+
+    // Só muda cursor para grabbing após mover um pouco (indica arraste ativo)
+    const totalDx = Math.abs(event.clientX - dragStartPosition.x);
+    const totalDy = Math.abs(event.clientY - dragStartPosition.y);
+    if (totalDx > DRAG_THRESHOLD || totalDy > DRAG_THRESHOLD) {
+      pixiContainer.style.cursor = 'grabbing';
+    }
 
     worldContainer.position.x += dx;
     worldContainer.position.y += dy;
@@ -118,5 +134,12 @@ export function setupPanControls(pixiContainer, worldContainer) {
   window.addEventListener('mouseup', () => {
     isPanning = false;
     pixiContainer.style.cursor = 'default';
+  });
+
+  // Cursor de grab ao passar o mouse sobre o container
+  pixiContainer.addEventListener('mouseenter', () => {
+    if (!isPanning) {
+      pixiContainer.style.cursor = 'default';
+    }
   });
 }

@@ -208,7 +208,7 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
                       (isDirectory ? createFolderIcon(color, isRoot) : createFileIcon(color, isRoot));
   container.addChild(iconGraphic);
 
-  // Label
+  // Label - posicionado para fora do centro do grafo
   const label = new PIXI.Text({
     text: isMoreNode ? node.name : truncateName(node.name, isRoot ? 20 : 15),
     style: {
@@ -219,8 +219,42 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
       fontStyle: isMoreNode ? 'italic' : 'normal'
     }
   });
-  label.anchor.set(0.5, 0);
-  label.y = baseRadius + 10;
+
+  // Posicionar label baseado no ângulo do nó (aponta para fora do grafo)
+  const labelDistance = baseRadius + 12;
+  if (isRoot) {
+    // Root: label embaixo
+    label.anchor.set(0.5, 0);
+    label.x = 0;
+    label.y = labelDistance;
+  } else {
+    // Outros nós: label na direção oposta ao centro
+    const labelAngle = node.labelAngle !== undefined ? node.labelAngle : Math.PI / 2;
+
+    // Normalizar o ângulo para determinar a posição do texto
+    const normalizedAngle = ((labelAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+
+    // Posicionar o label na direção do ângulo
+    label.x = Math.cos(labelAngle) * labelDistance;
+    label.y = Math.sin(labelAngle) * labelDistance;
+
+    // Ajustar o anchor baseado no quadrante para evitar sobreposição com o nó
+    // Ângulo 0 = direita, PI/2 = baixo, PI = esquerda, 3PI/2 = cima
+    if (normalizedAngle < Math.PI / 4 || normalizedAngle > Math.PI * 7 / 4) {
+      // Direita: anchor na esquerda do texto
+      label.anchor.set(0, 0.5);
+    } else if (normalizedAngle < Math.PI * 3 / 4) {
+      // Baixo: anchor no topo do texto
+      label.anchor.set(0.5, 0);
+    } else if (normalizedAngle < Math.PI * 5 / 4) {
+      // Esquerda: anchor na direita do texto
+      label.anchor.set(1, 0.5);
+    } else {
+      // Cima: anchor na base do texto
+      label.anchor.set(0.5, 1);
+    }
+  }
+
   label.alpha = isMoreNode ? 0.6 : 0.8;
   container.addChild(label);
   container._label = label;

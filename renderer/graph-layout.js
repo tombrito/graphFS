@@ -25,18 +25,34 @@ export function flattenTree(node, parentId, depth, nodes, edges) {
   }
 }
 
+// Constantes para espaçamento mínimo entre nós
+const MIN_NODE_SPACING = 80; // Espaçamento mínimo entre centros de nós
+const MIN_ARC_LENGTH = 60;   // Comprimento mínimo do arco entre nós adjacentes
+
 export function layoutNodesRadial(tree, nodes) {
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
   const root = nodeMap.get(tree.path);
   root.x = 0;
   root.y = 0;
+  root.labelAngle = Math.PI / 2; // Label para baixo
 
-  function positionChildren(parentNode, treeNode, startAngle, endAngle, radius) {
+  function positionChildren(parentNode, treeNode, startAngle, endAngle, baseRadius) {
     if (!treeNode.children || treeNode.children.length === 0) return;
 
     const children = treeNode.children;
+    const childCount = children.length;
+
+    // Calcular o raio necessário para manter espaçamento mínimo
+    // Comprimento do arco = raio * ângulo
+    // Para n nós em um arco, precisamos de (n) espaços de MIN_ARC_LENGTH
     const angleSpan = endAngle - startAngle;
-    const angleStep = angleSpan / children.length;
+    const requiredArcLength = childCount * MIN_ARC_LENGTH;
+    const requiredRadius = requiredArcLength / angleSpan;
+
+    // Usar o maior entre o raio base e o raio necessário
+    const radius = Math.max(baseRadius, requiredRadius);
+
+    const angleStep = angleSpan / childCount;
 
     children.forEach((childTree, index) => {
       const childNode = nodeMap.get(childTree.path);
@@ -46,18 +62,29 @@ export function layoutNodesRadial(tree, nodes) {
       childNode.y = parentNode.y + Math.sin(angle) * radius;
       childNode.angle = angle;
 
-      const descendantCount = countDescendants(childTree);
-      const nextRadius = Math.max(80, Math.min(200, 60 + descendantCount * 8));
+      // Calcular ângulo do label baseado na posição do nó
+      // Labels apontam para fora do centro do grafo
+      childNode.labelAngle = angle;
 
-      const childAngleSpan = Math.min(angleStep * 0.9, Math.PI * 0.8);
+      const descendantCount = countDescendants(childTree);
+
+      // Raio do próximo nível aumenta com a quantidade de descendentes
+      // e também considera a profundidade
+      const depthFactor = 1 + (childNode.depth || 0) * 0.1;
+      const nextBaseRadius = Math.max(100, Math.min(250, 80 + descendantCount * 12)) * depthFactor;
+
+      // Limitar o span angular dos filhos para evitar sobreposição
+      // Quanto mais filhos, menor o span individual
+      const maxChildSpan = Math.min(angleStep * 0.85, Math.PI * 0.6);
+      const childAngleSpan = maxChildSpan;
       const childStartAngle = angle - childAngleSpan / 2;
       const childEndAngle = angle + childAngleSpan / 2;
 
-      positionChildren(childNode, childTree, childStartAngle, childEndAngle, nextRadius);
+      positionChildren(childNode, childTree, childStartAngle, childEndAngle, nextBaseRadius);
     });
   }
 
-  const initialRadius = 150;
+  const initialRadius = 180;
   positionChildren(root, tree, 0, Math.PI * 2, initialRadius);
 }
 
