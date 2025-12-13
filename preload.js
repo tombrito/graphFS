@@ -1,8 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('graphfs', {
-  // API original
+  // API original (legado)
   getFilesystemTree: () => ipcRenderer.invoke('fs-tree'),
+
+  // APIs de persistência
+  scan: {
+    // Carrega o último scan salvo
+    loadLast: () => ipcRenderer.invoke('scan:load-last'),
+
+    // Salva o scan atual
+    save: (scanData) => ipcRenderer.invoke('scan:save', scanData)
+  },
 
   // APIs de search engines
   searchEngines: {

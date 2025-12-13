@@ -4,6 +4,40 @@ const fs = require('fs');
 const os = require('os');
 const { searchEngineManager } = require('./search-engines');
 
+// Arquivo para persistir o último scan
+let LAST_SCAN_FILE;
+
+/**
+ * Salva o último scan no disco
+ */
+function saveLastScan(scanData) {
+  try {
+    fs.writeFileSync(LAST_SCAN_FILE, JSON.stringify(scanData, null, 2), 'utf-8');
+    console.log('[Persist] Scan salvo em:', LAST_SCAN_FILE);
+    return true;
+  } catch (error) {
+    console.error('[Persist] Erro ao salvar scan:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Carrega o último scan do disco
+ */
+function loadLastScan() {
+  try {
+    if (fs.existsSync(LAST_SCAN_FILE)) {
+      const data = fs.readFileSync(LAST_SCAN_FILE, 'utf-8');
+      const scanData = JSON.parse(data);
+      console.log('[Persist] Scan carregado de:', LAST_SCAN_FILE);
+      return scanData;
+    }
+  } catch (error) {
+    console.error('[Persist] Erro ao carregar scan:', error.message);
+  }
+  return null;
+}
+
 const ROOT_PATH = process.env.GRAPHFS_ROOT || 'C:\\tmp';
 
 function createWindow() {
@@ -183,8 +217,28 @@ function buildFallbackTree() {
 }
 
 app.whenReady().then(() => {
-  // Handler original para árvore do filesystem
+  // Inicializa o caminho do arquivo de persistência (precisa esperar app.ready)
+  LAST_SCAN_FILE = path.join(app.getPath('userData'), 'last-scan.json');
+
+  // Handler original para árvore do filesystem (legado)
   ipcMain.handle('fs-tree', () => tryBuildRoot());
+
+  // === Handlers de persistência ===
+
+  // Carrega o último scan salvo
+  ipcMain.handle('scan:load-last', () => {
+    const lastScan = loadLastScan();
+    if (lastScan) {
+      return { success: true, ...lastScan };
+    }
+    return { success: false, message: 'Nenhum scan anterior encontrado' };
+  });
+
+  // Salva o scan atual
+  ipcMain.handle('scan:save', (event, scanData) => {
+    const success = saveLastScan(scanData);
+    return { success };
+  });
 
   // === Novos handlers para search engines ===
 
@@ -202,13 +256,17 @@ app.whenReady().then(() => {
   ipcMain.handle('search-engines:scan', async (event, rootPath, options = {}) => {
     try {
       const result = await searchEngineManager.scan(rootPath, options);
-      return {
+      const scanResult = {
         success: true,
         tree: result.tree,
         rootPath: rootPath,
         stats: result.stats,
-        fallbackUsed: false
+        fallbackUsed: false,
+        timestamp: Date.now()
       };
+      // Salva automaticamente após scan bem-sucedido
+      saveLastScan(scanResult);
+      return scanResult;
     } catch (error) {
       return {
         success: false,
@@ -223,13 +281,17 @@ app.whenReady().then(() => {
     const userDir = os.homedir();
     try {
       const result = await searchEngineManager.scan(userDir, options);
-      return {
+      const scanResult = {
         success: true,
         tree: result.tree,
         rootPath: userDir,
         stats: result.stats,
-        fallbackUsed: false
+        fallbackUsed: false,
+        timestamp: Date.now()
       };
+      // Salva automaticamente após scan bem-sucedido
+      saveLastScan(scanResult);
+      return scanResult;
     } catch (error) {
       return {
         success: false,
@@ -244,13 +306,17 @@ app.whenReady().then(() => {
     const drivePath = drive.endsWith('\\') ? drive : drive + '\\';
     try {
       const result = await searchEngineManager.scan(drivePath, options);
-      return {
+      const scanResult = {
         success: true,
         tree: result.tree,
         rootPath: drivePath,
         stats: result.stats,
-        fallbackUsed: false
+        fallbackUsed: false,
+        timestamp: Date.now()
       };
+      // Salva automaticamente após scan bem-sucedido
+      saveLastScan(scanResult);
+      return scanResult;
     } catch (error) {
       return {
         success: false,

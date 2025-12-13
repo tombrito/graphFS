@@ -241,9 +241,7 @@ class EverythingCliEngine extends BaseSearchEngine {
 
   async scan(rootPath, options = {}) {
     const {
-      maxDepth = 2,
-      topFilesPerDir = 3,
-      topDirsPerDir = 3,
+      topFiles = 50,  // Total de arquivos mais recentes a buscar
       onProgress = null
     } = options;
 
@@ -251,7 +249,7 @@ class EverythingCliEngine extends BaseSearchEngine {
     this.logger = createLogger();
     this.logger.log(`=== Iniciando scan ===`);
     this.logger.log(`Root path: ${rootPath}`);
-    this.logger.log(`Options: maxDepth=${maxDepth}, topFilesPerDir=${topFilesPerDir}, topDirsPerDir=${topDirsPerDir}`);
+    this.logger.log(`Options: topFiles=${topFiles}`);
 
     const available = await this.isAvailable();
     if (!available.available) {
@@ -268,23 +266,17 @@ class EverythingCliEngine extends BaseSearchEngine {
       onProgress({ phase: 'scanning', message: 'Consultando Everything...' });
     }
 
-    // Busca arquivos e pastas ordenados por data de modificação (mais recentes primeiro)
-    const items = await this._queryRecentItems(normalizedRoot, topFilesPerDir, topDirsPerDir, maxDepth);
+    // Busca os N arquivos mais recentes globalmente (sem limite de profundidade)
+    const recentFiles = await this._queryTopRecentFiles(normalizedRoot, topFiles);
 
-    this.logger.log(`Total de itens encontrados: ${items.length}`);
+    this.logger.log(`Total de arquivos encontrados: ${recentFiles.length}`);
 
     if (onProgress) {
-      onProgress({ phase: 'building-tree', total: items.length, current: 0 });
+      onProgress({ phase: 'building-tree', total: recentFiles.length, current: 0 });
     }
 
-    // Constrói a árvore a partir dos itens mais recentes
-    const tree = this._buildTreeFromRecentItems(
-      normalizedRoot,
-      items,
-      maxDepth,
-      topFilesPerDir,
-      topDirsPerDir
-    );
+    // Constrói a árvore a partir dos arquivos, criando diretórios intermediários
+    const tree = this._buildTreeFromFiles(normalizedRoot, recentFiles);
 
     this.logger.log(`=== Scan concluído ===`);
     this.logger.save();
@@ -292,73 +284,138 @@ class EverythingCliEngine extends BaseSearchEngine {
     return {
       tree,
       stats: {
-        totalItems: items.length,
+        totalFiles: recentFiles.length,
         engine: 'Everything-CLI'
       }
     };
   }
 
   /**
-   * Busca os itens mais recentes no Everything para cada nível de profundidade.
-   * Retorna uma lista de itens já ordenados por mtime.
+   * Busca os N arquivos mais recentes globalmente dentro do rootPath.
+   * Usa Everything para buscar sem limite de profundidade.
    */
-  async _queryRecentItems(rootPath, topFilesPerDir, topDirsPerDir, maxDepth) {
+  async _queryTopRecentFiles(rootPath, topFiles) {
     const esPath = this._findEsExe();
-    const allItems = [];
 
     // Carrega filtros do .scanignore
     scanFilter.load();
     const filterInfo = scanFilter.getInfo();
     this.logger.log(`Filtros carregados: ${filterInfo.patternCount} padrões`);
 
-    this.logger.log(`Buscando itens em: ${rootPath}`);
+    this.logger.log(`Buscando top ${topFiles} arquivos mais recentes em: ${rootPath}`);
 
-    // Busca pastas diretamente sob rootPath (profundidade 1)
-    this.logger.log(`Buscando pastas nível 1...`);
-    let dirsLevel1 = await this._runEsQuery(esPath, rootPath, true, topDirsPerDir * 20);
-    const dirsBeforeFilter = dirsLevel1.length;
-    dirsLevel1 = scanFilter.filter(dirsLevel1);
-    this.logger.log(`Pastas nível 1: ${dirsBeforeFilter} encontradas, ${dirsLevel1.length} após filtro`);
-    dirsLevel1.forEach(d => this.logger.log(`  [DIR] ${d.path} (mtime: ${new Date(d.mtime).toISOString()})`));
+    // Busca arquivos dentro do rootPath, ordenados por data de modificação
+    // Busca mais do que o necessário para compensar os que serão filtrados
+    const files = await this._runGlobalFileQuery(esPath, rootPath, topFiles * 3);
 
-    this.logger.log(`Buscando arquivos nível 1...`);
-    let filesLevel1 = await this._runEsQuery(esPath, rootPath, false, topFilesPerDir * 20);
-    const filesBeforeFilter = filesLevel1.length;
-    filesLevel1 = scanFilter.filter(filesLevel1);
-    this.logger.log(`Arquivos nível 1: ${filesBeforeFilter} encontrados, ${filesLevel1.length} após filtro`);
-    filesLevel1.forEach(f => this.logger.log(`  [FILE] ${f.path} (mtime: ${new Date(f.mtime).toISOString()})`));
+    const filesBeforeFilter = files.length;
+    const filteredFiles = scanFilter.filter(files);
 
-    // Adiciona itens do nível 1
-    allItems.push(...dirsLevel1);
-    allItems.push(...filesLevel1);
+    this.logger.log(`Arquivos encontrados: ${filesBeforeFilter}, após filtro: ${filteredFiles.length}`);
 
-    // Para cada diretório no nível 1, busca seus filhos (nível 2)
-    if (maxDepth >= 2) {
-      const topDirsLevel1 = dirsLevel1
-        .sort((a, b) => b.mtime - a.mtime)
-        .slice(0, topDirsPerDir);
+    // Pega apenas os top N após filtrar
+    const topRecentFiles = filteredFiles
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, topFiles);
 
-      this.logger.log(`Top ${topDirsPerDir} pastas para expandir nível 2:`);
-      topDirsLevel1.forEach(d => this.logger.log(`  -> ${d.path}`));
+    topRecentFiles.forEach((f, i) => {
+      this.logger.log(`  [${i + 1}] ${f.path} (mtime: ${new Date(f.mtime).toISOString()})`);
+    });
 
-      for (const dir of topDirsLevel1) {
-        this.logger.log(`Buscando dentro de: ${dir.path}`);
+    return topRecentFiles;
+  }
 
-        let subDirs = await this._runEsQuery(esPath, dir.path, true, topDirsPerDir * 10);
-        let subFiles = await this._runEsQuery(esPath, dir.path, false, topFilesPerDir * 10);
+  /**
+   * Executa uma query global no Everything para buscar arquivos dentro de um path
+   * (sem limite de profundidade, busca recursiva)
+   */
+  _runGlobalFileQuery(esPath, rootPath, maxResults) {
+    return new Promise((resolve, reject) => {
+      const items = [];
 
-        // Aplica filtros
-        subDirs = scanFilter.filter(subDirs);
-        subFiles = scanFilter.filter(subFiles);
+      // Query: busca todos os arquivos dentro do rootPath (recursivo)
+      // file: filtra apenas arquivos (não diretórios)
+      const escapedPath = rootPath.replace(/\\/g, '\\\\');
 
-        this.logger.log(`  Subpastas: ${subDirs.length}, Arquivos: ${subFiles.length} (após filtro)`);
+      const args = [
+        `"${rootPath}\\"`,           // Busca dentro do rootPath
+        'file:',                      // Apenas arquivos
+        '-n', String(maxResults),     // Limite de resultados
+        '-sort', 'dm',                // Ordena por data de modificação
+        '-sort-descending'            // Mais recentes primeiro
+      ];
 
-        allItems.push(...subDirs.map(item => ({ ...item, parentPath: dir.path })));
-        allItems.push(...subFiles.map(item => ({ ...item, parentPath: dir.path })));
+      if (this.logger) {
+        this.logger.log(`Query global: es.exe ${args.join(' ')}`);
       }
-    }
 
-    return allItems;
+      this.currentProcess = spawn(esPath, args, {
+        shell: true,
+        windowsHide: true
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      this.currentProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      this.currentProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      this.currentProcess.on('close', (code) => {
+        this.currentProcess = null;
+
+        if (stderr && this.logger) {
+          this.logger.log(`stderr: ${stderr}`);
+        }
+
+        const lines = stdout.trim().split('\n').filter(line => line.trim());
+
+        if (this.logger) {
+          this.logger.log(`Resultados brutos: ${lines.length} linhas`);
+        }
+
+        for (const line of lines) {
+          const fullPath = line.trim();
+          if (!fullPath) continue;
+
+          // Verifica se está dentro do rootPath
+          if (!fullPath.toLowerCase().startsWith(rootPath.toLowerCase())) {
+            continue;
+          }
+
+          let mtime = Date.now();
+          let size = 0;
+
+          try {
+            const stats = fs.statSync(fullPath);
+            mtime = stats.mtimeMs;
+            size = stats.size;
+          } catch (e) {
+            // Ignora itens que não conseguimos acessar
+            continue;
+          }
+
+          items.push({
+            name: path.basename(fullPath),
+            path: fullPath,
+            type: 'file',
+            mtime,
+            size
+          });
+        }
+
+        resolve(items);
+      });
+
+      this.currentProcess.on('error', (error) => {
+        this.currentProcess = null;
+        reject(error);
+      });
+    });
   }
 
   /**
@@ -464,114 +521,102 @@ class EverythingCliEngine extends BaseSearchEngine {
   }
 
   /**
-   * Constrói uma árvore hierárquica a partir dos itens mais recentes.
-   * Os itens já vêm ordenados por mtime do Everything.
+   * Constrói uma árvore hierárquica a partir dos arquivos mais recentes.
+   * Cria automaticamente os diretórios intermediários necessários.
    */
-  _buildTreeFromRecentItems(rootPath, items, maxDepth, topFilesPerDir, topDirsPerDir) {
-    // Agrupa itens por diretório pai
-    const itemsByParent = new Map();
+  _buildTreeFromFiles(rootPath, files) {
+    // Mapa de diretórios: path -> node
+    const dirNodes = new Map();
 
-    for (const item of items) {
-      const parentKey = item.parentPath.toLowerCase();
-      if (!itemsByParent.has(parentKey)) {
-        itemsByParent.set(parentKey, { dirs: [], files: [] });
-      }
-      const group = itemsByParent.get(parentKey);
-      if (item.type === 'directory') {
-        group.dirs.push(item);
-      } else {
-        group.files.push(item);
-      }
+    // Obtém mtime do diretório raiz
+    let rootMtime = Date.now();
+    try {
+      rootMtime = fs.statSync(rootPath).mtimeMs;
+    } catch (e) {
+      // Mantém Date.now()
     }
 
-    // Ordena cada grupo por mtime (mais recentes primeiro)
-    for (const [, group] of itemsByParent) {
-      group.dirs.sort((a, b) => b.mtime - a.mtime);
-      group.files.sort((a, b) => b.mtime - a.mtime);
+    // Cria o nó raiz
+    const rootNode = {
+      name: path.basename(rootPath) || rootPath,
+      path: rootPath,
+      type: 'directory',
+      mtime: rootMtime,
+      children: []
+    };
+    dirNodes.set(rootPath.toLowerCase(), rootNode);
+
+    // Para cada arquivo, cria os diretórios intermediários necessários
+    for (const file of files) {
+      // Extrai o caminho relativo ao root
+      const relativePath = path.relative(rootPath, file.path);
+      const parts = relativePath.split(path.sep);
+
+      // Remove o nome do arquivo (último elemento)
+      const fileName = parts.pop();
+
+      // Cria diretórios intermediários
+      let currentPath = rootPath;
+      let currentNode = rootNode;
+
+      for (const part of parts) {
+        currentPath = path.join(currentPath, part);
+        const normalizedPath = currentPath.toLowerCase();
+
+        if (!dirNodes.has(normalizedPath)) {
+          // Cria o nó do diretório
+          let dirMtime = Date.now();
+          try {
+            dirMtime = fs.statSync(currentPath).mtimeMs;
+          } catch (e) {
+            // Mantém Date.now()
+          }
+
+          const dirNode = {
+            name: part,
+            path: currentPath,
+            type: 'directory',
+            mtime: dirMtime,
+            children: []
+          };
+
+          // Adiciona como filho do diretório atual
+          currentNode.children.push(dirNode);
+          dirNodes.set(normalizedPath, dirNode);
+
+          if (this.logger) {
+            this.logger.log(`  Criando diretório intermediário: ${currentPath}`);
+          }
+        }
+
+        currentNode = dirNodes.get(normalizedPath);
+      }
+
+      // Adiciona o arquivo como filho do último diretório
+      currentNode.children.push({
+        name: file.name,
+        path: file.path,
+        type: 'file',
+        mtime: file.mtime,
+        size: file.size
+      });
     }
 
-    // Função recursiva para construir a árvore
-    const buildNode = (nodePath, currentDepth) => {
-      const name = path.basename(nodePath) || nodePath;
-      const normalizedPath = nodePath.toLowerCase();
-      const children = itemsByParent.get(normalizedPath) || { dirs: [], files: [] };
-
-      // Obtém mtime do diretório
-      let nodeMtime = Date.now();
-      try {
-        nodeMtime = fs.statSync(nodePath).mtimeMs;
-      } catch (e) {
-        // Mantém Date.now()
+    // Ordena os filhos de cada diretório por mtime (mais recentes primeiro)
+    const sortChildren = (node) => {
+      if (node.children && node.children.length > 0) {
+        node.children.sort((a, b) => b.mtime - a.mtime);
+        for (const child of node.children) {
+          if (child.type === 'directory') {
+            sortChildren(child);
+          }
+        }
       }
-
-      const node = {
-        name: name,
-        path: nodePath,
-        type: 'directory',
-        mtime: nodeMtime,
-        children: []
-      };
-
-      if (currentDepth >= maxDepth) {
-        node.collapsed = true;
-        node.hiddenDirsCount = children.dirs.length;
-        node.hiddenFilesCount = children.files.length;
-        node.totalFilesCount = children.files.length;
-        return node;
-      }
-
-      // Top diretórios mais recentes
-      const topDirs = children.dirs.slice(0, topDirsPerDir);
-      const hiddenDirCount = children.dirs.length - topDirs.length;
-
-      // Adiciona diretórios recursivamente
-      for (const dir of topDirs) {
-        node.children.push(buildNode(dir.path, currentDepth + 1));
-      }
-
-      // Placeholder para diretórios ocultos
-      if (hiddenDirCount > 0) {
-        node.children.push({
-          name: `... +${hiddenDirCount} ${hiddenDirCount === 1 ? 'pasta' : 'pastas'}`,
-          path: `${nodePath}/__more_dirs__`,
-          type: 'more-dirs',
-          hiddenCount: hiddenDirCount,
-          mtime: 0
-        });
-      }
-
-      // Top arquivos mais recentes
-      const topFiles = children.files.slice(0, topFilesPerDir);
-      const hiddenFileCount = children.files.length - topFiles.length;
-
-      for (const file of topFiles) {
-        node.children.push({
-          name: file.name,
-          path: file.path,
-          type: 'file',
-          mtime: file.mtime
-        });
-      }
-
-      // Placeholder para arquivos ocultos
-      if (hiddenFileCount > 0) {
-        node.children.push({
-          name: `... +${hiddenFileCount} ${hiddenFileCount === 1 ? 'arquivo' : 'arquivos'}`,
-          path: `${nodePath}/__more_files__`,
-          type: 'more-files',
-          hiddenCount: hiddenFileCount,
-          mtime: 0
-        });
-      }
-
-      node.hiddenDirsCount = hiddenDirCount;
-      node.hiddenFilesCount = hiddenFileCount;
-      node.totalFilesCount = children.files.length;
-
-      return node;
     };
 
-    return buildNode(rootPath, 0);
+    sortChildren(rootNode);
+
+    return rootNode;
   }
 
   async search(query, options = {}) {
