@@ -8,21 +8,144 @@ export function renderNotice(details, message) {
   details.appendChild(warn);
 }
 
+/**
+ * Formata data de modificação de forma amigável
+ */
+function formatDate(timestamp) {
+  if (!timestamp) return 'Desconhecida';
+
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  // Formato relativo para datas recentes
+  let relative = '';
+  if (diffMins < 1) {
+    relative = 'agora mesmo';
+  } else if (diffMins < 60) {
+    relative = `${diffMins} min atrás`;
+  } else if (diffHours < 24) {
+    relative = `${diffHours}h atrás`;
+  } else if (diffDays < 7) {
+    relative = `${diffDays} dia${diffDays > 1 ? 's' : ''} atrás`;
+  } else if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    relative = `${weeks} semana${weeks > 1 ? 's' : ''} atrás`;
+  } else if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30);
+    relative = `${months} ${months > 1 ? 'meses' : 'mês'} atrás`;
+  } else {
+    const years = Math.floor(diffDays / 365);
+    relative = `${years} ano${years > 1 ? 's' : ''} atrás`;
+  }
+
+  // Formato absoluto
+  const absolute = date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  return { relative, absolute };
+}
+
+/**
+ * Formata tamanho de arquivo
+ */
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return null;
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+
+  return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
 export function renderDetails(details, node) {
   details.innerHTML = '';
+
+  // Nome do arquivo/pasta
   const title = document.createElement('h3');
   title.textContent = node.name;
+
+  // Tipo (ARQUIVO/PASTA)
   const type = document.createElement('div');
   type.className = 'type';
   type.textContent = node.type === 'directory' ? 'PASTA' : 'ARQUIVO';
-  const path = document.createElement('p');
-  path.className = 'path';
-  path.textContent = node.id;
+
+  // Caminho completo
+  const pathEl = document.createElement('p');
+  pathEl.className = 'path';
+  pathEl.textContent = node.id;
 
   details.appendChild(title);
   details.appendChild(type);
-  details.appendChild(path);
+  details.appendChild(pathEl);
 
+  // Seção de metadados (data de modificação, tamanho)
+  const metaSection = document.createElement('div');
+  metaSection.className = 'meta-section';
+
+  // Data de modificação
+  if (node.mtime) {
+    const dateInfo = formatDate(node.mtime);
+
+    const mtimeRow = document.createElement('div');
+    mtimeRow.className = 'meta-row';
+
+    const mtimeLabel = document.createElement('span');
+    mtimeLabel.className = 'meta-label';
+    mtimeLabel.textContent = 'Modificado:';
+
+    const mtimeValue = document.createElement('span');
+    mtimeValue.className = 'meta-value';
+    mtimeValue.innerHTML = `<strong>${dateInfo.relative}</strong>`;
+
+    const mtimeAbsolute = document.createElement('span');
+    mtimeAbsolute.className = 'meta-absolute';
+    mtimeAbsolute.textContent = dateInfo.absolute;
+
+    mtimeRow.appendChild(mtimeLabel);
+    mtimeRow.appendChild(mtimeValue);
+    metaSection.appendChild(mtimeRow);
+    metaSection.appendChild(mtimeAbsolute);
+  }
+
+  // Tamanho (apenas para arquivos)
+  if (node.type === 'file' && node.size) {
+    const sizeFormatted = formatSize(node.size);
+    if (sizeFormatted) {
+      const sizeRow = document.createElement('div');
+      sizeRow.className = 'meta-row';
+
+      const sizeLabel = document.createElement('span');
+      sizeLabel.className = 'meta-label';
+      sizeLabel.textContent = 'Tamanho:';
+
+      const sizeValue = document.createElement('span');
+      sizeValue.className = 'meta-value';
+      sizeValue.textContent = sizeFormatted;
+
+      sizeRow.appendChild(sizeLabel);
+      sizeRow.appendChild(sizeValue);
+      metaSection.appendChild(sizeRow);
+    }
+  }
+
+  details.appendChild(metaSection);
+
+  // Info sobre conteúdo de diretórios
   if (node.type === 'directory') {
     const hiddenDirs = node.hiddenDirsCount || 0;
     const hiddenFiles = node.hiddenFilesCount || 0;

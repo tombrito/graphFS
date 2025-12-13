@@ -12,7 +12,8 @@ export function flattenTree(node, parentId, depth, nodes, edges) {
     hiddenDirsCount: node.hiddenDirsCount || 0,
     totalFilesCount: node.totalFilesCount || 0,
     collapsed: node.collapsed || false,
-    mtime: node.mtime
+    mtime: node.mtime,
+    size: node.size || 0
   };
   nodes.push(current);
 
