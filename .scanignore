@@ -1,0 +1,68 @@
+# GraphFS Scan Ignore Patterns
+# Similar to .gitignore - one pattern per line
+#
+# Supported patterns:
+#   - Glob patterns: *.tmp, node_modules, .git
+#   - Directory patterns (ending with /): .git/, node_modules/
+#   - Hidden files/folders: .*
+#   - Regex patterns (prefix with 'regex:'): regex:^\..*
+#
+# Lines starting with # are comments
+# Blank lines are ignored
+
+# Hidden files and directories (starting with dot)
+.*
+
+# Version control
+.git/
+.svn/
+.hg/
+
+# Dependencies
+node_modules/
+vendor/
+bower_components/
+
+# Build outputs
+dist/
+build/
+out/
+target/
+
+# Package manager caches
+.npm/
+.yarn/
+.pnpm-store/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+__pycache__/
+
+# Logs
+*.log
+logs/
+
+# Windows system folders
+Windows/
+Program Files/
+Program Files (x86)/
+ProgramData/
+Recovery/
+$Windows.~WS/
+$GetCurrent/
+$WinREAgent/
+System Volume Information/

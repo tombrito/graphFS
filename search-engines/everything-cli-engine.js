@@ -9,6 +9,7 @@ const { BaseSearchEngine } = require('./base-search-engine');
 const { spawn, execSync, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { scanFilter } = require('./scan-filter');
 
 // Diretório de logs
 const LOGS_DIR = path.join(__dirname, '..', 'logs');
@@ -305,17 +306,26 @@ class EverythingCliEngine extends BaseSearchEngine {
     const esPath = this._findEsExe();
     const allItems = [];
 
+    // Carrega filtros do .scanignore
+    scanFilter.load();
+    const filterInfo = scanFilter.getInfo();
+    this.logger.log(`Filtros carregados: ${filterInfo.patternCount} padrões`);
+
     this.logger.log(`Buscando itens em: ${rootPath}`);
 
     // Busca pastas diretamente sob rootPath (profundidade 1)
     this.logger.log(`Buscando pastas nível 1...`);
-    const dirsLevel1 = await this._runEsQuery(esPath, rootPath, true, topDirsPerDir * 10);
-    this.logger.log(`Pastas nível 1 encontradas: ${dirsLevel1.length}`);
+    let dirsLevel1 = await this._runEsQuery(esPath, rootPath, true, topDirsPerDir * 20);
+    const dirsBeforeFilter = dirsLevel1.length;
+    dirsLevel1 = scanFilter.filter(dirsLevel1);
+    this.logger.log(`Pastas nível 1: ${dirsBeforeFilter} encontradas, ${dirsLevel1.length} após filtro`);
     dirsLevel1.forEach(d => this.logger.log(`  [DIR] ${d.path} (mtime: ${new Date(d.mtime).toISOString()})`));
 
     this.logger.log(`Buscando arquivos nível 1...`);
-    const filesLevel1 = await this._runEsQuery(esPath, rootPath, false, topFilesPerDir * 10);
-    this.logger.log(`Arquivos nível 1 encontrados: ${filesLevel1.length}`);
+    let filesLevel1 = await this._runEsQuery(esPath, rootPath, false, topFilesPerDir * 20);
+    const filesBeforeFilter = filesLevel1.length;
+    filesLevel1 = scanFilter.filter(filesLevel1);
+    this.logger.log(`Arquivos nível 1: ${filesBeforeFilter} encontrados, ${filesLevel1.length} após filtro`);
     filesLevel1.forEach(f => this.logger.log(`  [FILE] ${f.path} (mtime: ${new Date(f.mtime).toISOString()})`));
 
     // Adiciona itens do nível 1
@@ -334,10 +344,14 @@ class EverythingCliEngine extends BaseSearchEngine {
       for (const dir of topDirsLevel1) {
         this.logger.log(`Buscando dentro de: ${dir.path}`);
 
-        const subDirs = await this._runEsQuery(esPath, dir.path, true, topDirsPerDir * 5);
-        const subFiles = await this._runEsQuery(esPath, dir.path, false, topFilesPerDir * 5);
+        let subDirs = await this._runEsQuery(esPath, dir.path, true, topDirsPerDir * 10);
+        let subFiles = await this._runEsQuery(esPath, dir.path, false, topFilesPerDir * 10);
 
-        this.logger.log(`  Subpastas: ${subDirs.length}, Arquivos: ${subFiles.length}`);
+        // Aplica filtros
+        subDirs = scanFilter.filter(subDirs);
+        subFiles = scanFilter.filter(subFiles);
+
+        this.logger.log(`  Subpastas: ${subDirs.length}, Arquivos: ${subFiles.length} (após filtro)`);
 
         allItems.push(...subDirs.map(item => ({ ...item, parentPath: dir.path })));
         allItems.push(...subFiles.map(item => ({ ...item, parentPath: dir.path })));

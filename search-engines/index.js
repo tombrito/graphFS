@@ -15,6 +15,7 @@
 const { BaseSearchEngine } = require('./base-search-engine');
 const { EverythingCliEngine } = require('./everything-cli-engine');
 const { SearchEngineManager, searchEngineManager } = require('./search-engine-manager');
+const { ScanFilter, scanFilter } = require('./scan-filter');
 
 module.exports = {
   // Classes base
@@ -25,5 +26,9 @@ module.exports = {
 
   // Gerenciador
   SearchEngineManager,
-  searchEngineManager // Singleton
+  searchEngineManager, // Singleton
+
+  // Filtros
+  ScanFilter,
+  scanFilter // Singleton
 };
