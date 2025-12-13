@@ -220,6 +220,14 @@ section.right {
   background: #000008;
   border: 1px solid rgba(201, 183, 125, 0.2);
   border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+#pixi-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
 }
 
 #legend {
