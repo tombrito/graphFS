@@ -2,11 +2,18 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
   font-family: 'Segoe UI', Arial, sans-serif;
   background: #000008;
   color: #c9b77d;
+  display: flex;
+  flex-direction: column;
 }
 
 header {
@@ -186,13 +193,18 @@ h2, h3 {
 
 main {
   display: flex;
-  height: calc(100vh - 150px);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 section.left {
   flex: 2;
   padding: 16px;
   border-right: 1px solid rgba(201, 183, 125, 0.15);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 section.right {
@@ -203,7 +215,8 @@ section.right {
 }
 
 #pixi-container {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   background: #000008;
   border: 1px solid rgba(201, 183, 125, 0.2);
   border-radius: 8px;
@@ -213,6 +226,7 @@ section.right {
   margin-top: 12px;
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .badge {
@@ -292,6 +306,7 @@ section.right {
   margin-top: 12px;
   display: flex;
   gap: 20px;
+  flex-shrink: 0;
 }
 
 .switch-label {
