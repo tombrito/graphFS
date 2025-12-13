@@ -4,7 +4,9 @@
   "description": "MVP do GraphFS com visualização simples em Electron e PixiJS.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "postinstall": "node scripts/download-everything-cli.js",
+    "download-es": "node scripts/download-everything-cli.js"
   },
   "author": "",
   "license": "MIT",

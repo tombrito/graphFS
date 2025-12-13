@@ -10,7 +10,12 @@
     <header>
       <h1>GraphFS — Visualização inicial do filesystem</h1>
       <p class="subtitle">Listando conteúdo de <span id="root-path"></span></p>
-      <p class="hint">Use Ctrl + scroll do mouse para dar zoom. Para testar outro caminho, defina a variável de ambiente <code>GRAPHFS_ROOT</code> e reinicie o app.</p>
+      <p class="hint">Use Ctrl + scroll do mouse para dar zoom.</p>
+      <div id="scan-controls">
+        <button id="btn-scan-user" class="scan-btn">Escanear Pasta do Usuário</button>
+        <button id="btn-scan-drive" class="scan-btn">Escanear C:</button>
+        <span id="scan-status" class="scan-status"></span>
+      </div>
     </header>
 
     <main>
@@ -43,6 +48,15 @@
         <div id="tree-view"></div>
       </section>
     </main>
+
+    <!-- Modal de resultado do scan -->
+    <div id="scan-modal" class="modal" hidden>
+      <div class="modal-content">
+        <h3 id="modal-title">Scan concluído</h3>
+        <div id="modal-body"></div>
+        <button id="modal-close" class="scan-btn">OK</button>
+      </div>
+    </div>
 
     <script type="module" src="renderer.js"></script>
   </body>

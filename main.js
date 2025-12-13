@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const { searchEngineManager } = require('./search-engines');
 
 const ROOT_PATH = process.env.GRAPHFS_ROOT || 'C:\\tmp';
 
@@ -180,7 +182,89 @@ function buildFallbackTree() {
 }
 
 app.whenReady().then(() => {
+  // Handler original para árvore do filesystem
   ipcMain.handle('fs-tree', () => tryBuildRoot());
+
+  // === Novos handlers para search engines ===
+
+  // Lista motores de busca disponíveis
+  ipcMain.handle('search-engines:list', async () => {
+    try {
+      const engines = await searchEngineManager.listEngines();
+      return { success: true, engines };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Escaneia um diretório usando o motor de busca
+  ipcMain.handle('search-engines:scan', async (event, rootPath, options = {}) => {
+    try {
+      const result = await searchEngineManager.scan(rootPath, options);
+      return {
+        success: true,
+        tree: result.tree,
+        rootPath: rootPath,
+        stats: result.stats,
+        fallbackUsed: false
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        rootPath: rootPath
+      };
+    }
+  });
+
+  // Escaneia o diretório do usuário
+  ipcMain.handle('search-engines:scan-user', async (event, options = {}) => {
+    const userDir = os.homedir();
+    try {
+      const result = await searchEngineManager.scan(userDir, options);
+      return {
+        success: true,
+        tree: result.tree,
+        rootPath: userDir,
+        stats: result.stats,
+        fallbackUsed: false
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        rootPath: userDir
+      };
+    }
+  });
+
+  // Escaneia C:\
+  ipcMain.handle('search-engines:scan-drive', async (event, drive = 'C:', options = {}) => {
+    const drivePath = drive.endsWith('\\') ? drive : drive + '\\';
+    try {
+      const result = await searchEngineManager.scan(drivePath, options);
+      return {
+        success: true,
+        tree: result.tree,
+        rootPath: drivePath,
+        stats: result.stats,
+        fallbackUsed: false
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        rootPath: drivePath
+      };
+    }
+  });
+
+  // Cancela operação em andamento
+  ipcMain.handle('search-engines:cancel', () => {
+    searchEngineManager.cancel();
+    return { success: true };
+  });
+
   createWindow();
 
   app.on('activate', () => {
