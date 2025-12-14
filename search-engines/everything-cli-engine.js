@@ -53,7 +53,6 @@ class EverythingCliEngine extends BaseSearchEngine {
     super('Everything-CLI');
     this.esPath = null;
     this.currentProcess = null;
-    this.everythingStarted = false;
   }
 
   /**
@@ -113,7 +112,6 @@ class EverythingCliEngine extends BaseSearchEngine {
         const running = this._isEverythingRunning();
         if (running) {
           console.log('[Everything] Everything iniciado com sucesso!');
-          this.everythingStarted = true;
         }
         resolve(running);
       }, 2000);
@@ -462,7 +460,7 @@ class EverythingCliEngine extends BaseSearchEngine {
       const parts = relativePath.split(path.sep);
 
       // Remove o nome do arquivo (último elemento)
-      const fileName = parts.pop();
+      parts.pop();
 
       // Cria diretórios intermediários
       let currentPath = rootPath;
@@ -540,17 +538,19 @@ class EverythingCliEngine extends BaseSearchEngine {
       const esPath = this._findEsExe();
       const results = [];
 
-      let searchQuery = query;
+      const args = [];
+
+      // Usa -path como opção CLI (suporta paths com espaços)
       if (searchPath) {
-        searchQuery = `"${searchPath}\\" ${query}`;
+        args.push('-path', searchPath);
       }
 
-      const args = [
-        searchQuery,
+      args.push(
+        query,
         '-n', maxResults.toString(),
-        '-sort', 'date-modified',
+        '-sort', 'dm',
         '-sort-descending'
-      ];
+      );
 
       const proc = spawn(esPath, args, {
         shell: false,
