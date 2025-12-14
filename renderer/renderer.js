@@ -38,8 +38,30 @@ const state = {
   nodesData: [],
   time: 0,
   bgAnimEnabled: true,
-  lineAnimEnabled: true
+  lineAnimEnabled: true,
+  activePathEdgeIds: new Set() // IDs das edges no caminho do nó selecionado até a raiz
 };
+
+/**
+ * Calcula o caminho de um nó até a raiz e retorna os IDs das edges
+ */
+function getPathToRoot(node, edges, nodes) {
+  const pathEdgeIds = new Set();
+  let currentNode = node;
+
+  while (currentNode && currentNode.depth > 0) {
+    // Encontrar a edge que conecta este nó ao seu pai
+    const parentEdge = edges.find(e => e.target === currentNode.id);
+    if (parentEdge) {
+      pathEdgeIds.add(`${parentEdge.source}-${parentEdge.target}`);
+      currentNode = nodes.find(n => n.id === parentEdge.source);
+    } else {
+      break;
+    }
+  }
+
+  return pathEdgeIds;
+}
 
 /**
  * Mostra/esconde o indicador de loading inicial
@@ -166,6 +188,7 @@ async function renderGraphFromScan(scanResult) {
   state.edgesContainer.removeChildren();
   state.nodeGraphics.clear();
   state.selectedNode = null;
+  state.activePathEdgeIds = new Set();
   resetEdgeGraphicsCache();
 
   // Processa árvore
@@ -202,6 +225,8 @@ async function renderGraphFromScan(scanResult) {
       () => state.selectedNode,
       (n) => {
         state.selectedNode = n;
+        // Calcula o caminho do nó selecionado até a raiz
+        state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
         renderDetails(details, n);
       }
     );

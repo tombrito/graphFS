@@ -89,8 +89,13 @@ export function createEdgeParticles(edge, source, target, particlesContainer) {
   // Tamanho das partículas varia com recência (1.5 a 3.5)
   const particleSize = 1.5 + recency * 2;
 
-  // Velocidade varia com recência (mais rápido = mais recente)
-  const baseSpeed = 0.002 + recency * 0.006;
+  // Velocidade BASE reduzida (modo "calmo" por padrão)
+  // Velocidade normal: 0.002 + recency * 0.006
+  // Velocidade calma: 40% da normal
+  const baseSpeed = (0.002 + recency * 0.006) * 0.4;
+
+  // ID único da edge para rastrear caminho ativo
+  const edgeId = `${source.id}-${target.id}`;
 
   for (let i = 0; i < particleCount; i++) {
     const particle = new PIXI.Graphics();
@@ -104,9 +109,11 @@ export function createEdgeParticles(edge, source, target, particlesContainer) {
     particle.endFill();
 
     particle._progress = i / particleCount;
-    particle._speed = baseSpeed + Math.random() * 0.002;
+    particle._baseSpeed = baseSpeed; // velocidade base (calma)
+    particle._speed = baseSpeed + Math.random() * 0.001;
     particle._sourceId = source.id;
     particle._targetId = target.id;
+    particle._edgeId = edgeId;
     particle._baseSize = particleSize;
     particle._recency = recency;
 
@@ -114,8 +121,9 @@ export function createEdgeParticles(edge, source, target, particlesContainer) {
     edge.particles.push(particle);
   }
 
-  // Armazenar recência no edge para uso no drawEdges
+  // Armazenar recência e ID no edge para uso no drawEdges
   edge.recency = recency;
+  edge.edgeId = edgeId;
 }
 
 // ============================================
@@ -124,7 +132,7 @@ export function createEdgeParticles(edge, source, target, particlesContainer) {
 // Reutilizar o mesmo Graphics para evitar memory leak
 let cachedEdgeGraphics = null;
 
-export function drawEdges(edgesContainer, edgeData, nodesData) {
+export function drawEdges(edgesContainer, edgeData, nodesData, activePathEdgeIds = null) {
   // Criar o Graphics apenas uma vez e reutilizar
   if (!cachedEdgeGraphics) {
     cachedEdgeGraphics = new PIXI.Graphics();
@@ -140,17 +148,20 @@ export function drawEdges(edgesContainer, edgeData, nodesData) {
 
     if (source && target) {
       const recency = edge.recency || 0.5;
+      const isActivePath = activePathEdgeIds && activePathEdgeIds.has(edge.edgeId);
 
       // Variação da espessura com base na recência
-      const glowWidth = 3 + recency * 4; // 3 a 7
-      const lineWidth = 1.2 + recency * 1.8; // 1.2 a 3
+      // No caminho ativo: linhas mais grossas
+      const glowWidth = isActivePath ? 8 : (2 + recency * 2); // ativo: 8, normal: 2-4
+      const lineWidth = isActivePath ? 3 : (0.8 + recency * 1); // ativo: 3, normal: 0.8-1.8
 
       // Variação da opacidade
-      const glowAlpha = 0.08 + recency * 0.15; // 0.08 a 0.23
-      const lineAlpha = 0.4 + recency * 0.4; // 0.4 a 0.8
+      // No caminho ativo: mais opaco; normal: mais sutil
+      const glowAlpha = isActivePath ? 0.35 : (0.05 + recency * 0.08); // ativo: 0.35, normal: 0.05-0.13
+      const lineAlpha = isActivePath ? 0.9 : (0.25 + recency * 0.25); // ativo: 0.9, normal: 0.25-0.5
 
-      // Cor mais brilhante para nós muito recentes
-      const edgeColor = recency > 0.7 ? COLORS.edgeGlow : COLORS.edge;
+      // Cor mais brilhante para caminho ativo ou nós muito recentes
+      const edgeColor = isActivePath ? COLORS.edgeGlow : (recency > 0.7 ? COLORS.edgeGlow : COLORS.edge);
 
       // Glow externo
       cachedEdgeGraphics.setStrokeStyle({
@@ -323,8 +334,8 @@ export function createAnimationLoop(state) {
       });
     }
 
-    // Desenhar edges
-    drawEdges(state.edgesContainer, state.edgeData, state.nodesData);
+    // Desenhar edges (passa caminho ativo para destacar)
+    drawEdges(state.edgesContainer, state.edgeData, state.nodesData, state.activePathEdgeIds);
 
     // Animar partículas nas conexões - apenas se habilitado
     if (state.lineAnimEnabled) {
@@ -333,8 +344,13 @@ export function createAnimationLoop(state) {
         const target = state.nodesData.find(n => n.id === edge.target);
 
         if (source && target && edge.particles) {
+          // Verificar se esta edge está no caminho ativo
+          const isActivePath = state.activePathEdgeIds && state.activePathEdgeIds.has(edge.edgeId);
+
           edge.particles.forEach(particle => {
-            particle._progress += particle._speed;
+            // Velocidade: 2.5x mais rápido se no caminho ativo
+            const speedMultiplier = isActivePath ? 2.5 : 1;
+            particle._progress += particle._speed * speedMultiplier;
             if (particle._progress > 1) particle._progress = 0;
 
             // Interpolar posição
@@ -355,13 +371,21 @@ export function createAnimationLoop(state) {
             }
 
             // Partículas mais recentes têm alpha maior
-            const baseAlpha = 0.6 + recency * 0.3;
+            // No caminho ativo: alpha ainda maior
+            const baseAlpha = isActivePath ? 0.9 : (0.4 + recency * 0.2);
             particle.alpha = alpha * baseAlpha;
 
-            // Pulso no tamanho para partículas muito recentes
-            if (recency > 0.6) {
-              const sizePulse = Math.sin(state.time * 3 + particle._progress * Math.PI * 2) * 0.3 + 1;
-              particle.scale.set(sizePulse);
+            // Escala: maior no caminho ativo
+            const baseScale = isActivePath ? 1.3 : 0.8;
+
+            // Pulso no tamanho para partículas no caminho ativo ou muito recentes
+            if (isActivePath || recency > 0.6) {
+              const pulseIntensity = isActivePath ? 0.4 : 0.3;
+              const pulseSpeed = isActivePath ? 5 : 3;
+              const sizePulse = Math.sin(state.time * pulseSpeed + particle._progress * Math.PI * 2) * pulseIntensity + 1;
+              particle.scale.set(baseScale * sizePulse);
+            } else {
+              particle.scale.set(baseScale);
             }
           });
         }
