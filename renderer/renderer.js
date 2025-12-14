@@ -1,5 +1,6 @@
 // Orquestrador principal - importa e coordena os módulos
 
+import * as PIXI from '../node_modules/pixi.js/dist/pixi.mjs';
 import { COLORS, updateMtimeRange } from './colors.js';
 import { flattenTree, layoutNodesForce } from './graph-layout.js';
 import { createNode } from './nodes.js';
@@ -117,43 +118,68 @@ async function bootstrap() {
           return;
         }
         if (node.path) {
-          // Feedback visual: animação suave de pulse
+          // Feedback visual estilo "video game"
           const originalScale = container.scale.x;
-          const duration = 400; // ms
+          const duration = 500; // ms
           const startTime = performance.now();
+
+          // Criar anel de ripple
+          const ripple = new PIXI.Graphics();
+          ripple.setStrokeStyle({ width: 3, color: 0xffffff, alpha: 1 });
+          ripple.circle(0, 0, 30);
+          ripple.stroke();
+          container.addChild(ripple);
+
+          // Flash branco overlay
+          const flash = new PIXI.Graphics();
+          flash.beginFill(0xffffff, 0.8);
+          flash.circle(0, 0, 35);
+          flash.endFill();
+          container.addChild(flash);
 
           const animatePulse = () => {
             const elapsed = performance.now() - startTime;
             const progress = Math.min(elapsed / duration, 1);
 
-            // Easing: ease-out-back para um efeito mais "bouncy"
+            // Easing functions
             const easeOutBack = (t) => {
               const c1 = 1.70158;
               const c3 = c1 + 1;
               return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
             };
+            const easeOutQuad = (t) => 1 - (1 - t) * (1 - t);
 
-            // Scale: sobe até 1.3 na metade, depois volta
+            // Scale: bounce
             let scale;
-            if (progress < 0.5) {
-              scale = originalScale + (0.3 * easeOutBack(progress * 2));
+            if (progress < 0.4) {
+              scale = originalScale + (0.35 * easeOutBack(progress / 0.4));
             } else {
-              scale = (originalScale + 0.3) - (0.3 * easeOutBack((progress - 0.5) * 2));
+              scale = (originalScale + 0.35) - (0.35 * easeOutQuad((progress - 0.4) / 0.6));
             }
             container.scale.set(scale);
 
-            // Glow: intensifica e depois diminui
-            const glowIntensity = progress < 0.5
-              ? 0.4 + (0.6 * progress * 2)
-              : 1.0 - (0.6 * (progress - 0.5) * 2);
+            // Glow: intenso no início
+            const glowIntensity = 1.0 - (0.6 * easeOutQuad(progress));
             container._outerGlow.visible = true;
             container._outerGlow.alpha = glowIntensity;
+
+            // Flash branco: desaparece rápido
+            flash.alpha = Math.max(0, 1 - (progress * 4));
+
+            // Ripple: expande e desaparece
+            const rippleScale = 1 + (progress * 1.0);
+            ripple.scale.set(rippleScale);
+            ripple.alpha = Math.max(0, 1 - progress);
 
             if (progress < 1) {
               requestAnimationFrame(animatePulse);
             } else {
               container.scale.set(originalScale);
               container._outerGlow.alpha = 0.4;
+              container.removeChild(ripple);
+              container.removeChild(flash);
+              ripple.destroy();
+              flash.destroy();
             }
           };
 
