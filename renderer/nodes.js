@@ -230,6 +230,8 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   container.addChild(iconGraphic);
 
   // Label - posicionado para fora do centro do grafo
+  const labelContainer = new PIXI.Container();
+
   const label = new PIXI.Text({
     text: isMoreNode ? node.name : truncateName(node.name, isRoot ? 20 : 15),
     style: {
@@ -242,13 +244,32 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
     resolution: 3
   });
 
+  // Fundo escuro para legibilidade
+  const padding = { x: 4, y: 2 };
+  const labelBg = new PIXI.Graphics();
+  labelBg.beginFill(0x0a0a12, 0.85);
+  labelBg.drawRoundedRect(
+    -padding.x,
+    -padding.y,
+    label.width + padding.x * 2,
+    label.height + padding.y * 2,
+    3
+  );
+  labelBg.endFill();
+
+  labelContainer.addChild(labelBg);
+  labelContainer.addChild(label);
+
   // Posicionar label baseado no ângulo do nó (aponta para fora do grafo)
   const labelDistance = baseRadius + 12;
+  let anchorX = 0.5, anchorY = 0.5;
+
   if (isRoot) {
     // Root: label embaixo
-    label.anchor.set(0.5, 0);
-    label.x = 0;
-    label.y = labelDistance;
+    anchorX = 0.5;
+    anchorY = 0;
+    labelContainer.x = 0;
+    labelContainer.y = labelDistance;
   } else {
     // Outros nós: label na direção oposta ao centro
     const labelAngle = node.labelAngle !== undefined ? node.labelAngle : Math.PI / 2;
@@ -257,29 +278,37 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
     const normalizedAngle = ((labelAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 
     // Posicionar o label na direção do ângulo
-    label.x = Math.cos(labelAngle) * labelDistance;
-    label.y = Math.sin(labelAngle) * labelDistance;
+    labelContainer.x = Math.cos(labelAngle) * labelDistance;
+    labelContainer.y = Math.sin(labelAngle) * labelDistance;
 
     // Ajustar o anchor baseado no quadrante para evitar sobreposição com o nó
     // Ângulo 0 = direita, PI/2 = baixo, PI = esquerda, 3PI/2 = cima
     if (normalizedAngle < Math.PI / 4 || normalizedAngle > Math.PI * 7 / 4) {
       // Direita: anchor na esquerda do texto
-      label.anchor.set(0, 0.5);
+      anchorX = 0;
+      anchorY = 0.5;
     } else if (normalizedAngle < Math.PI * 3 / 4) {
       // Baixo: anchor no topo do texto
-      label.anchor.set(0.5, 0);
+      anchorX = 0.5;
+      anchorY = 0;
     } else if (normalizedAngle < Math.PI * 5 / 4) {
       // Esquerda: anchor na direita do texto
-      label.anchor.set(1, 0.5);
+      anchorX = 1;
+      anchorY = 0.5;
     } else {
       // Cima: anchor na base do texto
-      label.anchor.set(0.5, 1);
+      anchorX = 0.5;
+      anchorY = 1;
     }
   }
 
-  label.alpha = isMoreNode ? 0.6 : 0.8;
-  container.addChild(label);
-  container._label = label;
+  // Aplicar anchor manualmente ao container (pivot)
+  labelContainer.pivot.x = (label.width + padding.x * 2) * anchorX - padding.x;
+  labelContainer.pivot.y = (label.height + padding.y * 2) * anchorY - padding.y;
+
+  labelContainer.alpha = isMoreNode ? 0.6 : 0.8;
+  container.addChild(labelContainer);
+  container._label = labelContainer;
 
   // Badges
   if (isDirectory && node.childCount > 0) {
