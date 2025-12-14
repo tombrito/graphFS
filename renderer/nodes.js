@@ -87,7 +87,8 @@ export function createBadge(count) {
       fontFamily: 'Arial',
       fontSize: 9,
       fill: COLORS.textMuted
-    }
+    },
+    resolution: 3
   });
   text.anchor.set(0.5);
   badge.addChild(text);
@@ -112,7 +113,8 @@ export function createHiddenBadge(count, isCollapsed) {
       fontSize: 9,
       fill: 0xffffff,
       fontWeight: 'bold'
-    }
+    },
+    resolution: 3
   });
   text.anchor.set(0.5);
   badge.addChild(text);
@@ -236,7 +238,8 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
       fill: isMoreNode ? COLORS.textMuted : COLORS.text,
       align: 'center',
       fontStyle: isMoreNode ? 'italic' : 'normal'
-    }
+    },
+    resolution: 3
   });
 
   // Posicionar label baseado no ângulo do nó (aponta para fora do grafo)
