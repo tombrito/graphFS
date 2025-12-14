@@ -310,21 +310,15 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   container.addChild(labelContainer);
   container._label = labelContainer;
 
-  // Badges
-  if (isDirectory && node.childCount > 0) {
-    const badge = createBadge(node.childCount);
+  // Badge com contagem real de arquivos do diretório
+  const realFileCount = node.totalFilesCount || 0;
+  if (isDirectory && realFileCount > 0) {
+    const badge = createBadge(realFileCount);
     badge.x = baseRadius - 5;
     badge.y = -baseRadius + 5;
     container.addChild(badge);
   }
 
-  const totalHidden = (node.hiddenFilesCount || 0) + (node.hiddenDirsCount || 0);
-  if (isDirectory && totalHidden > 0) {
-    const hiddenBadge = createHiddenBadge(totalHidden, node.collapsed);
-    hiddenBadge.x = -baseRadius + 5;
-    hiddenBadge.y = -baseRadius + 5;
-    container.addChild(hiddenBadge);
-  }
 
   // Interatividade
   container.eventMode = 'static';

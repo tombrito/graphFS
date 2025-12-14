@@ -525,7 +525,68 @@ class EverythingCliEngine extends BaseSearchEngine {
 
     sortChildren(rootNode);
 
+    // Popula contagens reais de arquivos/diretórios para cada nó
+    this._populateRealCounts(rootNode);
+
     return rootNode;
+  }
+
+  /**
+   * Popula as contagens reais de arquivos e diretórios para cada nó da árvore.
+   * Usa fs.readdirSync para obter a contagem real do sistema de arquivos.
+   */
+  _populateRealCounts(node) {
+    if (node.type !== 'directory') {
+      return;
+    }
+
+    try {
+      const entries = fs.readdirSync(node.path, { withFileTypes: true });
+
+      // Conta arquivos e diretórios reais (excluindo hidden/system quando possível)
+      let totalFiles = 0;
+      let totalDirs = 0;
+
+      for (const entry of entries) {
+        // Ignora entradas que começam com . (hidden no estilo Unix)
+        if (entry.name.startsWith('.')) continue;
+        // Ignora desktop.ini (arquivo de sistema do Windows)
+        if (entry.name.toLowerCase() === 'desktop.ini') continue;
+
+        if (entry.isDirectory()) {
+          totalDirs++;
+        } else if (entry.isFile()) {
+          totalFiles++;
+        }
+      }
+
+      // Conta filhos exibidos na árvore atual
+      const displayedFiles = node.children ? node.children.filter(c => c.type === 'file').length : 0;
+      const displayedDirs = node.children ? node.children.filter(c => c.type === 'directory').length : 0;
+
+      // Popula as contagens
+      node.totalFilesCount = totalFiles;
+      node.totalDirsCount = totalDirs;
+      node.hiddenFilesCount = Math.max(0, totalFiles - displayedFiles);
+      node.hiddenDirsCount = Math.max(0, totalDirs - displayedDirs);
+
+      if (this.logger) {
+        this.logger.log(`  Contagem real para ${node.path}: ${totalFiles} arquivos, ${totalDirs} dirs (exibidos: ${displayedFiles} arq, ${displayedDirs} dirs)`);
+      }
+    } catch (e) {
+      // Se não conseguir ler o diretório, mantém contagens baseadas nos filhos exibidos
+      node.totalFilesCount = node.children ? node.children.filter(c => c.type === 'file').length : 0;
+      node.totalDirsCount = node.children ? node.children.filter(c => c.type === 'directory').length : 0;
+      node.hiddenFilesCount = 0;
+      node.hiddenDirsCount = 0;
+    }
+
+    // Processa filhos recursivamente
+    if (node.children) {
+      for (const child of node.children) {
+        this._populateRealCounts(child);
+      }
+    }
   }
 
   async search(query, options = {}) {
