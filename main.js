@@ -217,9 +217,26 @@ function buildFallbackTree() {
   return root;
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Inicializa o caminho do arquivo de persistência (precisa esperar app.ready)
   LAST_SCAN_FILE = path.join(app.getPath('userData'), 'last-scan.json');
+
+  // Inicia o Everything proativamente (se disponível) para estar pronto quando o usuário fizer scan
+  // Isso evita o erro "Everything IPC window not found" nos primeiros cliques
+  console.log('[Startup] Verificando e iniciando Everything...');
+  try {
+    const engine = searchEngineManager.getCurrentEngine();
+    if (engine) {
+      const status = await engine.isAvailable();
+      if (status.available) {
+        console.log('[Startup] Everything está pronto:', status.message);
+      } else {
+        console.warn('[Startup] Everything não disponível:', status.message);
+      }
+    }
+  } catch (error) {
+    console.error('[Startup] Erro ao iniciar Everything:', error.message);
+  }
 
   // Handler original para árvore do filesystem (legado)
   ipcMain.handle('fs-tree', () => tryBuildRoot());

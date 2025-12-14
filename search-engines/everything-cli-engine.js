@@ -302,16 +302,22 @@ class EverythingCliEngine extends BaseSearchEngine {
     const filterInfo = scanFilter.getInfo();
     this.logger.log(`Filtros carregados: ${filterInfo.patternCount} padrões`);
 
+    // Obtém exclusões no formato do Everything para incluir na query
+    const everythingExclusions = scanFilter.getEverythingExclusions();
+    this.logger.log(`Exclusões Everything: ${everythingExclusions || '(nenhuma)'}`);
+
     this.logger.log(`Buscando top ${topFiles} arquivos mais recentes em: ${rootPath}`);
 
     // Busca arquivos dentro do rootPath, ordenados por data de modificação
-    // Busca mais do que o necessário para compensar os que serão filtrados
-    const files = await this._runGlobalFileQuery(esPath, rootPath, topFiles * 3);
+    // As exclusões são aplicadas diretamente na query do Everything
+    // Ainda busca um pouco mais para compensar padrões não suportados (como .*)
+    const files = await this._runGlobalFileQuery(esPath, rootPath, topFiles * 2, everythingExclusions);
 
     const filesBeforeFilter = files.length;
+    // Aplica filtro pós-query para padrões não suportados pelo Everything (como .*)
     const filteredFiles = scanFilter.filter(files);
 
-    this.logger.log(`Arquivos encontrados: ${filesBeforeFilter}, após filtro: ${filteredFiles.length}`);
+    this.logger.log(`Arquivos encontrados: ${filesBeforeFilter}, após filtro pós-query: ${filteredFiles.length}`);
 
     // Pega apenas os top N após filtrar
     const topRecentFiles = filteredFiles
@@ -328,29 +334,41 @@ class EverythingCliEngine extends BaseSearchEngine {
   /**
    * Executa uma query global no Everything para buscar arquivos dentro de um path
    * (sem limite de profundidade, busca recursiva)
+   * @param {string} esPath - Caminho para es.exe
+   * @param {string} rootPath - Diretório raiz para buscar
+   * @param {number} maxResults - Número máximo de resultados
+   * @param {string} exclusions - Exclusões no formato do Everything (ex: !path:\AppData\)
    */
-  _runGlobalFileQuery(esPath, rootPath, maxResults) {
+  _runGlobalFileQuery(esPath, rootPath, maxResults, exclusions = '') {
     return new Promise((resolve, reject) => {
       const items = [];
 
-      // Query: busca todos os arquivos dentro do rootPath (recursivo)
-      // file: filtra apenas arquivos (não diretórios)
-      const escapedPath = rootPath.replace(/\\/g, '\\\\');
+      // Query: busca arquivos globalmente com exclusões, depois filtra por rootPath em código
+      // (Filtro de path com espaços não funciona bem no Everything CLI)
 
       const args = [
-        `"${rootPath}\\"`,           // Busca dentro do rootPath
         'file:',                      // Apenas arquivos
-        '-n', String(maxResults),     // Limite de resultados
+      ];
+
+      // Adiciona exclusões como argumentos separados
+      if (exclusions) {
+        const exclusionParts = exclusions.split(' ').filter(e => e.trim());
+        args.push(...exclusionParts);
+      }
+
+      // Busca mais resultados pois vamos filtrar por path depois
+      args.push(
+        '-n', String(maxResults * 3), // Busca mais para compensar filtro de path
         '-sort', 'dm',                // Ordena por data de modificação
         '-sort-descending'            // Mais recentes primeiro
-      ];
+      );
 
       if (this.logger) {
         this.logger.log(`Query global: es.exe ${args.join(' ')}`);
       }
 
       this.currentProcess = spawn(esPath, args, {
-        shell: true,
+        shell: false,
         windowsHide: true
       });
 
