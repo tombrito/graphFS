@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -361,6 +361,34 @@ app.whenReady().then(async () => {
   ipcMain.handle('search-engines:cancel', () => {
     searchEngineManager.cancel();
     return { success: true };
+  });
+
+  // === Handlers para abrir arquivos/diretórios ===
+
+  // Abre um arquivo ou diretório com o aplicativo padrão do sistema
+  // Para diretórios: abre no File Explorer (Windows), Finder (macOS), ou gerenciador de arquivos (Linux)
+  // Para arquivos: abre com o aplicativo associado ao tipo de arquivo
+  ipcMain.handle('shell:open-path', async (event, targetPath) => {
+    try {
+      const result = await shell.openPath(targetPath);
+      if (result) {
+        // shell.openPath retorna string vazia em sucesso, ou mensagem de erro
+        return { success: false, error: result };
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Mostra um arquivo/diretório no File Explorer (selecionado)
+  ipcMain.handle('shell:show-item-in-folder', (event, targetPath) => {
+    try {
+      shell.showItemInFolder(targetPath);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   });
 
   createWindow();

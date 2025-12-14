@@ -3,6 +3,7 @@
 export function flattenTree(node, parentId, depth, nodes, edges) {
   const current = {
     id: node.path,
+    path: node.path,
     name: node.name,
     type: node.type,
     depth,

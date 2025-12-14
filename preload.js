@@ -32,5 +32,16 @@ contextBridge.exposeInMainWorld('graphfs', {
 
     // Cancela operação em andamento
     cancel: () => ipcRenderer.invoke('search-engines:cancel')
+  },
+
+  // APIs de shell (abrir arquivos/diretórios)
+  shell: {
+    // Abre um arquivo ou diretório com o aplicativo padrão do sistema
+    // Diretórios: abre no File Explorer (Win), Finder (macOS), gerenciador de arquivos (Linux)
+    // Arquivos: abre com o aplicativo associado
+    openPath: (targetPath) => ipcRenderer.invoke('shell:open-path', targetPath),
+
+    // Mostra o item no File Explorer (selecionado)
+    showItemInFolder: (targetPath) => ipcRenderer.invoke('shell:show-item-in-folder', targetPath)
   }
 });

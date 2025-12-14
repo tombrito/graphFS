@@ -252,6 +252,7 @@ section.right {
   border-radius: 8px;
   overflow: hidden;
   position: relative;
+  user-select: none;
 }
 
 #pixi-container canvas {
@@ -265,6 +266,7 @@ section.right {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+  user-select: none;
 }
 
 .badge {

@@ -97,6 +97,78 @@ async function bootstrap() {
   );
   setupPanControls(pixiContainer, state.worldContainer);
 
+  // Double-click para abrir arquivos/diretórios
+  pixiContainer.addEventListener('dblclick', async (event) => {
+    event.preventDefault();
+    const rect = pixiContainer.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    for (const [nodeId, container] of state.nodeGraphics) {
+      const bounds = container.getBounds();
+      if (
+        mouseX >= bounds.x &&
+        mouseX <= bounds.x + bounds.width &&
+        mouseY >= bounds.y &&
+        mouseY <= bounds.y + bounds.height
+      ) {
+        const node = container.nodeData;
+        if (node.type === 'more-dirs' || node.type === 'more-files') {
+          return;
+        }
+        if (node.path) {
+          // Feedback visual: animação suave de pulse
+          const originalScale = container.scale.x;
+          const duration = 400; // ms
+          const startTime = performance.now();
+
+          const animatePulse = () => {
+            const elapsed = performance.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Easing: ease-out-back para um efeito mais "bouncy"
+            const easeOutBack = (t) => {
+              const c1 = 1.70158;
+              const c3 = c1 + 1;
+              return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+            };
+
+            // Scale: sobe até 1.3 na metade, depois volta
+            let scale;
+            if (progress < 0.5) {
+              scale = originalScale + (0.3 * easeOutBack(progress * 2));
+            } else {
+              scale = (originalScale + 0.3) - (0.3 * easeOutBack((progress - 0.5) * 2));
+            }
+            container.scale.set(scale);
+
+            // Glow: intensifica e depois diminui
+            const glowIntensity = progress < 0.5
+              ? 0.4 + (0.6 * progress * 2)
+              : 1.0 - (0.6 * (progress - 0.5) * 2);
+            container._outerGlow.visible = true;
+            container._outerGlow.alpha = glowIntensity;
+
+            if (progress < 1) {
+              requestAnimationFrame(animatePulse);
+            } else {
+              container.scale.set(originalScale);
+              container._outerGlow.alpha = 0.4;
+            }
+          };
+
+          requestAnimationFrame(animatePulse);
+
+          const result = await window.graphfs.shell.openPath(node.path);
+          if (!result.success) {
+            console.error('[DoubleClick] Erro ao abrir:', node.path, result.error);
+          }
+        }
+        return;
+      }
+    }
+  });
+
   // Iniciar loop de animação
   state.app.ticker.add(createAnimationLoop(state));
 
