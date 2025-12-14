@@ -74,17 +74,21 @@ class ScanFilter {
         continue;
       }
 
-      // Converte glob pattern para regex (para filtro pós-query)
-      const regex = this._globToRegex(trimmed);
-      if (regex) {
-        this.regexPatterns.push(regex);
-      }
-
       // Converte para exclusão do Everything (para filtro na query)
       const everythingExclusion = this._convertToEverythingExclusion(trimmed);
       if (everythingExclusion) {
         everythingExclusionsList.push(everythingExclusion);
         this.exclusionPatterns.push(trimmed);
+        // Não adiciona ao regex se já foi convertido para Everything
+        // (evita filtro duplo)
+        continue;
+      }
+
+      // Converte glob pattern para regex (para filtro pós-query)
+      // Apenas para padrões não suportados pelo Everything
+      const regex = this._globToRegex(trimmed);
+      if (regex) {
+        this.regexPatterns.push(regex);
       }
     }
 
@@ -114,10 +118,19 @@ class ScanFilter {
       return `!ext:${ext}`;
     }
 
-    // Padrão .* (hidden files/folders) - não suportado diretamente
-    // Será tratado pelo filtro pós-query
+    // Padrão .* (hidden files/folders) - exclui paths contendo \.
     if (p === '.*') {
-      return null;
+      return '!path:\\.';
+    }
+
+    // Padrão *~ (arquivos de backup terminando em ~)
+    if (p === '*~') {
+      return '!*~';
+    }
+
+    // Padrões com wildcards simples no início (*algo) - Everything suporta nativamente
+    if (p.startsWith('*') && !p.slice(1).includes('*') && !p.includes('?')) {
+      return `!${p}`;
     }
 
     // Padrões com wildcards complexos não são suportados

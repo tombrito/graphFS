@@ -12,6 +12,10 @@
       <p class="subtitle">Listando conteúdo de <span id="root-path"></span></p>
       <p class="hint">Use Ctrl + scroll do mouse para dar zoom.</p>
       <div id="scan-controls">
+        <label class="scan-input-label">
+          <span>Máx arquivos:</span>
+          <input type="number" id="max-files-input" value="50" min="10" max="500" step="10">
+        </label>
         <button id="btn-scan-user" class="scan-btn">Escanear Pasta do Usuário</button>
         <button id="btn-scan-drive" class="scan-btn">Escanear C:</button>
         <span id="scan-status" class="scan-status"></span>

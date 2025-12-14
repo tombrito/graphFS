@@ -109,6 +109,36 @@ h2, h3 {
   color: #81c784;
 }
 
+.scan-input-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(201, 183, 125, 0.8);
+}
+
+.scan-input-label input[type="number"] {
+  width: 70px;
+  background: rgba(201, 183, 125, 0.1);
+  border: 1px solid rgba(201, 183, 125, 0.4);
+  color: #c9b77d;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.scan-input-label input[type="number"]:focus {
+  outline: none;
+  border-color: #c9b77d;
+  box-shadow: 0 0 8px rgba(201, 183, 125, 0.3);
+}
+
+.scan-input-label input[type="number"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Modal */
 .modal {
   position: fixed;

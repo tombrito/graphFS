@@ -16,6 +16,7 @@ const fallbackBadge = document.getElementById('fallback-badge');
 const btnScanUser = document.getElementById('btn-scan-user');
 const btnScanDrive = document.getElementById('btn-scan-drive');
 const scanStatus = document.getElementById('scan-status');
+const maxFilesInput = document.getElementById('max-files-input');
 const scanModal = document.getElementById('scan-modal');
 const modalTitle = document.getElementById('modal-title');
 const modalBody = document.getElementById('modal-body');
@@ -69,7 +70,7 @@ async function bootstrap() {
     setInitialLoading(true, 'Escaneando pasta do usuário...');
 
     try {
-      const result = await window.graphfs.searchEngines.scanUser();
+      const result = await window.graphfs.searchEngines.scanUser({ topFiles: getTopFiles() });
 
       if (result.success) {
         await renderGraphFromScan(result);
@@ -191,6 +192,14 @@ async function renderGraphFromScan(scanResult) {
 
 
 /**
+ * Obtém o valor de topFiles do input
+ */
+function getTopFiles() {
+  const value = parseInt(maxFilesInput?.value, 10);
+  return (!isNaN(value) && value >= 10) ? value : 50;
+}
+
+/**
  * Configura os botões de scan
  */
 function setupScanButtons() {
@@ -200,6 +209,7 @@ function setupScanButtons() {
     isScanning = scanning;
     btnScanUser.disabled = scanning;
     btnScanDrive.disabled = scanning;
+    maxFilesInput.disabled = scanning;
     scanStatus.textContent = message;
   };
 
@@ -229,8 +239,9 @@ function setupScanButtons() {
     btnScanUser.textContent = 'Escaneando...';
 
     try {
-      console.log('[Scan] Iniciando scan da pasta do usuário...');
-      const result = await window.graphfs.searchEngines.scanUser();
+      const topFiles = getTopFiles();
+      console.log('[Scan] Iniciando scan da pasta do usuário... (topFiles:', topFiles, ')');
+      const result = await window.graphfs.searchEngines.scanUser({ topFiles });
       console.log('[Scan] Resultado:', result);
 
       if (result.success) {
@@ -265,8 +276,9 @@ function setupScanButtons() {
     btnScanDrive.textContent = 'Escaneando...';
 
     try {
-      console.log('[Scan] Iniciando scan de C:...');
-      const result = await window.graphfs.searchEngines.scanDrive('C:');
+      const topFiles = getTopFiles();
+      console.log('[Scan] Iniciando scan de C:... (topFiles:', topFiles, ')');
+      const result = await window.graphfs.searchEngines.scanDrive('C:', { topFiles });
       console.log('[Scan] Resultado:', result);
 
       if (result.success) {

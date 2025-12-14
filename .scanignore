@@ -68,6 +68,10 @@ $WinREAgent/
 System Volume Information/
 NTUSER.DAT
 
+# other Windows folders
+Program Files/
+Program Files (x86)/
+
 # other
 AppData/
 IntelGraphicsProfiles
