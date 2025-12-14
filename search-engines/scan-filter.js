@@ -13,7 +13,6 @@ const SCANIGNORE_FILE = '.scanignore';
 
 class ScanFilter {
   constructor() {
-    this.patterns = [];
     this.regexPatterns = [];
     this.exclusionPatterns = [];      // Padrões originais para Everything
     this.everythingExclusions = '';   // String formatada para query do Everything
@@ -25,7 +24,6 @@ class ScanFilter {
    * @param {string} basePath - Diretório base para procurar o .scanignore
    */
   load(basePath = null) {
-    this.patterns = [];
     this.regexPatterns = [];
     this.exclusionPatterns = [];
     this.everythingExclusions = '';
@@ -230,7 +228,7 @@ class ScanFilter {
 
   /**
    * Retorna os padrões de exclusão no formato do Everything CLI.
-   * Sintaxe: !path:AppData\ !path:node_modules\
+   * Sintaxe: !path:AppData !path:node_modules !ext:log
    * @returns {string} - String com exclusões para adicionar à query do Everything
    */
   getEverythingExclusions() {

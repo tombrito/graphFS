@@ -6,7 +6,7 @@
  * Foco: retornar arquivos mais recentemente modificados para exibição no grafo.
  */
 const { BaseSearchEngine } = require('./base-search-engine');
-const { spawn, execSync, exec } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { scanFilter } = require('./scan-filter');
@@ -337,7 +337,7 @@ class EverythingCliEngine extends BaseSearchEngine {
    * @param {string} esPath - Caminho para es.exe
    * @param {string} rootPath - Diretório raiz para buscar
    * @param {number} maxResults - Número máximo de resultados
-   * @param {string} exclusions - Exclusões no formato do Everything (ex: !path:\AppData\)
+   * @param {string} exclusions - Exclusões no formato do Everything (ex: !path:AppData !ext:log)
    */
   _runGlobalFileQuery(esPath, rootPath, maxResults, exclusions = '') {
     return new Promise((resolve, reject) => {
@@ -423,108 +423,6 @@ class EverythingCliEngine extends BaseSearchEngine {
             type: 'file',
             mtime,
             size
-          });
-        }
-
-        resolve(items);
-      });
-
-      this.currentProcess.on('error', (error) => {
-        this.currentProcess = null;
-        reject(error);
-      });
-    });
-  }
-
-  /**
-   * Executa uma query no Everything CLI para buscar itens diretos de um diretório
-   */
-  _runEsQuery(esPath, searchPath, foldersOnly, maxResults) {
-    return new Promise((resolve, reject) => {
-      const items = [];
-
-      // Usa regex para filtrar apenas itens diretos (sem subpastas)
-      // Formato: "path\" + qualquer coisa que NÃO contenha mais barras
-      const escapedPath = searchPath.replace(/\\/g, '\\\\');
-      const typeFilter = foldersOnly ? 'folder:' : 'file:';
-
-      // Query: busca tudo que começa com o path e filtra por tipo
-      // wfn: (whole filename) regex para garantir que é filho direto
-      const query = `"${searchPath}\\*" ${typeFilter}`;
-
-      const args = [
-        '-r', `^${escapedPath}\\\\[^\\\\]+$`,  // regex: path\algo (sem mais barras)
-        typeFilter,
-        '-n', String(maxResults),
-        '-sort', 'dm',
-        '-sort-descending'
-      ];
-
-      if (this.logger) {
-        this.logger.log(`Query: es.exe ${args.join(' ')}`);
-      }
-
-      this.currentProcess = spawn(esPath, args, {
-        shell: false,
-        windowsHide: true
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      this.currentProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      this.currentProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      this.currentProcess.on('close', (code) => {
-        this.currentProcess = null;
-
-        if (stderr && this.logger) {
-          this.logger.log(`stderr: ${stderr}`);
-        }
-
-        // Parse dos resultados
-        const lines = stdout.trim().split('\n').filter(line => line.trim());
-
-        if (this.logger) {
-          this.logger.log(`Resultados brutos: ${lines.length} linhas`);
-        }
-
-        for (const line of lines) {
-          const fullPath = line.trim();
-          if (!fullPath) continue;
-
-          // Verifica se é filho direto do searchPath
-          const parentDir = path.dirname(fullPath);
-          if (parentDir.toLowerCase() !== searchPath.toLowerCase()) {
-            continue;
-          }
-
-          let mtime = Date.now();
-          let size = 0;
-
-          try {
-            const stats = fs.statSync(fullPath);
-            mtime = stats.mtimeMs;
-            size = stats.size;
-          } catch (e) {
-            // Ignora itens que não conseguimos acessar
-            continue;
-          }
-
-          const name = path.basename(fullPath);
-
-          items.push({
-            name,
-            path: fullPath,
-            type: foldersOnly ? 'directory' : 'file',
-            mtime,
-            size,
-            parentPath: searchPath
           });
         }
 
@@ -662,7 +560,7 @@ class EverythingCliEngine extends BaseSearchEngine {
       ];
 
       const proc = spawn(esPath, args, {
-        shell: true,
+        shell: false,
         windowsHide: true
       });
 
