@@ -343,11 +343,10 @@ class EverythingCliEngine extends BaseSearchEngine {
     return new Promise((resolve, reject) => {
       const items = [];
 
-      // Query: busca arquivos globalmente com exclusões, depois filtra por rootPath em código
-      // (Filtro de path com espaços não funciona bem no Everything CLI)
-
+      // Usa -path como opção de linha de comando (suporta paths com espaços)
       const args = [
-        'file:',                      // Apenas arquivos
+        '-path', rootPath,            // Filtro de path como opção CLI
+        'file:',                       // Apenas arquivos
       ];
 
       // Adiciona exclusões como argumentos separados
@@ -356,15 +355,14 @@ class EverythingCliEngine extends BaseSearchEngine {
         args.push(...exclusionParts);
       }
 
-      // Busca mais resultados pois vamos filtrar por path depois
       args.push(
-        '-n', String(maxResults * 3), // Busca mais para compensar filtro de path
+        '-n', String(maxResults),     // Número máximo de resultados
         '-sort', 'dm',                // Ordena por data de modificação
         '-sort-descending'            // Mais recentes primeiro
       );
 
       if (this.logger) {
-        this.logger.log(`Query global: es.exe ${args.join(' ')}`);
+        this.logger.log(`Query: es.exe ${args.join(' ')}`);
       }
 
       this.currentProcess = spawn(esPath, args, {
@@ -399,11 +397,6 @@ class EverythingCliEngine extends BaseSearchEngine {
         for (const line of lines) {
           const fullPath = line.trim();
           if (!fullPath) continue;
-
-          // Verifica se está dentro do rootPath
-          if (!fullPath.toLowerCase().startsWith(rootPath.toLowerCase())) {
-            continue;
-          }
 
           let mtime = Date.now();
           let size = 0;
