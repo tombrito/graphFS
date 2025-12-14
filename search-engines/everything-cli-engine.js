@@ -345,6 +345,8 @@ class EverythingCliEngine extends BaseSearchEngine {
       const args = [
         '-path', rootPath,            // Filtro de path como opção CLI
         'file:',                       // Apenas arquivos
+        '!attrib:h',                   // Exclui arquivos hidden (Windows)
+        '!attrib:s',                   // Exclui arquivos system (Windows)
       ];
 
       // Adiciona exclusões como argumentos separados

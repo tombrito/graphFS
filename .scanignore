@@ -10,7 +10,7 @@
 # Lines starting with # are comments
 # Blank lines are ignored
 
-# Hidden files and directories (starting with dot)
+# Hidden files are not queried by default, but I still want to hide other directories starting with dot
 .*
 
 # Version control
@@ -66,6 +66,8 @@ $Windows.~WS/
 $GetCurrent/
 $WinREAgent/
 System Volume Information/
+NTUSER.DAT
 
 # other
 AppData/
+IntelGraphicsProfiles
