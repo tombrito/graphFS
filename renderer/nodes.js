@@ -122,7 +122,26 @@ export function createHiddenBadge(count, isCollapsed) {
 
 function truncateName(name, maxLength) {
   if (name.length <= maxLength) return name;
-  return name.substring(0, maxLength - 2) + '…';
+
+  // Verificar se tem extensão (arquivo)
+  const lastDotIndex = name.lastIndexOf('.');
+
+  // Se tem extensão e não é um arquivo oculto (que começa com .)
+  if (lastDotIndex > 0) {
+    const extension = name.substring(lastDotIndex); // inclui o ponto
+    const baseName = name.substring(0, lastDotIndex);
+
+    // Calcular espaço disponível para o nome base
+    // maxLength - extensão.length - 1 (para o …)
+    const availableForBase = maxLength - extension.length - 1;
+
+    if (availableForBase > 0) {
+      return baseName.substring(0, availableForBase) + '…' + extension;
+    }
+  }
+
+  // Fallback: comportamento original (para diretórios ou nomes sem extensão)
+  return name.substring(0, maxLength - 1) + '…';
 }
 
 export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDetails) {
