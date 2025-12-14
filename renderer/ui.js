@@ -145,28 +145,52 @@ export function renderDetails(details, node) {
 
   details.appendChild(metaSection);
 
-  // Info sobre conteúdo de diretórios
+  // Contagem de conteúdo para diretórios
   if (node.type === 'directory') {
-    const hiddenDirs = node.hiddenDirsCount || 0;
-    const hiddenFiles = node.hiddenFilesCount || 0;
+    const totalDirs = node.totalDirsCount || 0;
+    const totalFiles = node.totalFilesCount || 0;
 
-    if (node.collapsed && (hiddenDirs > 0 || hiddenFiles > 0)) {
-      const collapsedInfo = document.createElement('p');
-      collapsedInfo.style.color = '#c9a227';
-      collapsedInfo.style.fontSize = '12px';
-      collapsedInfo.style.marginTop = '8px';
-      const parts = [];
-      if (hiddenDirs > 0) parts.push(`${hiddenDirs} pastas`);
-      if (hiddenFiles > 0) parts.push(`${hiddenFiles} arquivos`);
-      collapsedInfo.textContent = `Contém: ${parts.join(', ')}`;
-      details.appendChild(collapsedInfo);
-    } else if (hiddenFiles > 0) {
-      const hiddenInfo = document.createElement('p');
-      hiddenInfo.style.color = '#6488a8';
-      hiddenInfo.style.fontSize = '12px';
-      hiddenInfo.style.marginTop = '8px';
-      hiddenInfo.textContent = `+${hiddenFiles} arquivos ocultos (${node.totalFilesCount} total)`;
-      details.appendChild(hiddenInfo);
+    if (totalDirs > 0 || totalFiles > 0) {
+      const contentSection = document.createElement('div');
+      contentSection.className = 'meta-section';
+
+      // Total de pastas
+      if (totalDirs > 0) {
+        const dirsRow = document.createElement('div');
+        dirsRow.className = 'meta-row';
+
+        const dirsLabel = document.createElement('span');
+        dirsLabel.className = 'meta-label';
+        dirsLabel.textContent = 'Pastas:';
+
+        const dirsValue = document.createElement('span');
+        dirsValue.className = 'meta-value';
+        dirsValue.textContent = totalDirs;
+
+        dirsRow.appendChild(dirsLabel);
+        dirsRow.appendChild(dirsValue);
+        contentSection.appendChild(dirsRow);
+      }
+
+      // Total de arquivos
+      if (totalFiles > 0) {
+        const filesRow = document.createElement('div');
+        filesRow.className = 'meta-row';
+
+        const filesLabel = document.createElement('span');
+        filesLabel.className = 'meta-label';
+        filesLabel.textContent = 'Arquivos:';
+
+        const filesValue = document.createElement('span');
+        filesValue.className = 'meta-value';
+        filesValue.textContent = totalFiles;
+
+        filesRow.appendChild(filesLabel);
+        filesRow.appendChild(filesValue);
+        contentSection.appendChild(filesRow);
+      }
+
+      details.appendChild(contentSection);
     }
   }
 }

@@ -96,32 +96,6 @@ export function createBadge(count) {
   return badge;
 }
 
-export function createHiddenBadge(count, isCollapsed) {
-  const badge = new PIXI.Container();
-  const bgColor = isCollapsed ? 0xc9a227 : COLORS.directory;
-
-  const bg = new PIXI.Graphics();
-  bg.beginFill(bgColor, 0.9);
-  bg.drawRoundedRect(-14, -8, 28, 16, 8);
-  bg.endFill();
-  badge.addChild(bg);
-
-  const text = new PIXI.Text({
-    text: isCollapsed ? '...' : `+${count > 99 ? '99' : count}`,
-    style: {
-      fontFamily: 'Arial',
-      fontSize: 9,
-      fill: 0xffffff,
-      fontWeight: 'bold'
-    },
-    resolution: 3
-  });
-  text.anchor.set(0.5);
-  badge.addChild(text);
-
-  return badge;
-}
-
 function truncateName(name, maxLength) {
   if (name.length <= maxLength) return name;
 
@@ -318,7 +292,6 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
     badge.y = -baseRadius + 5;
     container.addChild(badge);
   }
-
 
   // Interatividade
   container.eventMode = 'static';
