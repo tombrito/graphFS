@@ -21,6 +21,7 @@ const scanModal = document.getElementById('scan-modal');
 const modalTitle = document.getElementById('modal-title');
 const modalBody = document.getElementById('modal-body');
 const modalClose = document.getElementById('modal-close');
+const btnFullscreen = document.getElementById('btn-fullscreen');
 
 // Estado global da aplicação
 const state = {
@@ -361,8 +362,54 @@ function setupScanButtons() {
   });
 }
 
+/**
+ * Configura o modo fullscreen do grafo
+ */
+function setupFullscreen() {
+  let isFullscreen = false;
+
+  const toggleFullscreen = () => {
+    isFullscreen = !isFullscreen;
+    pixiContainer.classList.toggle('fullscreen', isFullscreen);
+
+    // Atualiza o ícone do botão
+    if (isFullscreen) {
+      btnFullscreen.innerHTML = `
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+        </svg>
+      `;
+      btnFullscreen.title = 'Sair da tela cheia (ESC)';
+    } else {
+      btnFullscreen.innerHTML = `
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+        </svg>
+      `;
+      btnFullscreen.title = 'Tela cheia (ESC para sair)';
+    }
+
+    // Redimensiona o canvas do PixiJS
+    if (state.app) {
+      const rect = pixiContainer.getBoundingClientRect();
+      state.app.renderer.resize(rect.width, rect.height);
+    }
+  };
+
+  // Clique no botão
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  // ESC para sair do fullscreen
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isFullscreen) {
+      toggleFullscreen();
+    }
+  });
+}
+
 bootstrap();
 setupScanButtons();
+setupFullscreen();
 
 // Monitor de memória na UI
 const memoryBadge = document.getElementById('memory-badge');

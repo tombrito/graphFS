@@ -57,16 +57,6 @@ npm start
 - **Pan**: Middle mouse button or Shift + left click + drag
 - **Select node**: Click on any node to see details
 
-### Environment Variables
-
-- `GRAPHFS_ROOT` - Set custom root path for initial display (default: `C:\tmp`)
-
-```bash
-# Windows
-set GRAPHFS_ROOT=C:\Projects
-npm start
-```
-
 ## Architecture
 
 ```

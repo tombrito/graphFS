@@ -255,6 +255,53 @@ section.right {
   user-select: none;
 }
 
+/* Fullscreen mode */
+#pixi-container.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  border: none;
+  border-radius: 0;
+  z-index: 9999;
+}
+
+/* Fullscreen button */
+.fullscreen-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  background: rgba(0, 0, 8, 0.7);
+  border: 1px solid rgba(201, 183, 125, 0.4);
+  border-radius: 6px;
+  color: rgba(201, 183, 125, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10000;
+  padding: 0;
+}
+
+.fullscreen-btn:hover {
+  background: rgba(201, 183, 125, 0.15);
+  border-color: #c9b77d;
+  color: #c9b77d;
+  box-shadow: 0 0 10px rgba(201, 183, 125, 0.3);
+}
+
+.fullscreen-btn:active {
+  transform: scale(0.95);
+}
+
+.fullscreen-btn svg {
+  pointer-events: none;
+}
+
 #pixi-container canvas {
   width: 100% !important;
   height: 100% !important;

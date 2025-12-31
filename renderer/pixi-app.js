@@ -16,7 +16,11 @@ export async function createPixiApp(pixiContainer) {
     resolution: window.devicePixelRatio || 1
   });
 
-  pixiContainer.innerHTML = '';
+  // Remove apenas o canvas antigo, preservando outros elementos (como o botão fullscreen)
+  const oldCanvas = pixiContainer.querySelector('canvas');
+  if (oldCanvas) {
+    oldCanvas.remove();
+  }
   pixiContainer.appendChild(app.canvas);
 
   // Criar containers em ordem de camadas
