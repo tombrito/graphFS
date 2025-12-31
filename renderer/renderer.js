@@ -96,6 +96,12 @@ function cleanupGpuResources() {
   }
 }
 
+// Configuração de filtros
+const filterConfig = {
+  timePeriod: 0,       // 0 = ALL, ou milissegundos (3600000 = 1H, etc.)
+  itemsPerDir: 3       // Quantidade de itens por pasta (1-10)
+};
+
 // Estado global da aplicação
 const state = {
   app: null,
@@ -110,6 +116,9 @@ const state = {
   nodeGraphics: new Map(),
   edgeData: [],
   nodesData: [],
+  // Dados originais (sem filtro) para re-aplicar filtros
+  originalTree: null,
+  originalRootPath: null,
   time: 0,
   bgAnimEnabled: true,
   lineAnimEnabled: true,
@@ -270,11 +279,127 @@ async function initPixiApp() {
 }
 
 /**
- * Renderiza o grafo a partir de um resultado de scan
+ * Filtra a árvore baseado nos filtros atuais (tempo e quantidade)
+ * Retorna uma nova árvore com os nós filtrados
  */
-async function renderGraphFromScan(scanResult) {
-  const { tree, rootPath } = scanResult;
+function filterTree(tree, timePeriod, itemsPerDir) {
+  const now = Date.now();
+  const cutoffTime = timePeriod > 0 ? now - timePeriod : 0;
 
+  function cloneAndFilter(node, depth = 0) {
+    // Clone o nó
+    const filtered = { ...node };
+
+    // Se não tem filhos, retorna o nó se passar no filtro de tempo
+    if (!node.children || node.children.length === 0) {
+      // Root sempre passa, arquivos/dirs precisam passar no filtro de tempo
+      if (depth === 0 || timePeriod === 0 || node.mtime >= cutoffTime) {
+        return filtered;
+      }
+      return null;
+    }
+
+    // Filtra os filhos recursivamente
+    const filteredChildren = [];
+    let hiddenDirs = 0;
+    let hiddenFiles = 0;
+
+    // Separa dirs e files
+    const dirs = node.children.filter(c => c.type === 'directory');
+    const files = node.children.filter(c => c.type === 'file');
+    const placeholders = node.children.filter(c => c.type === 'more-dirs' || c.type === 'more-files');
+
+    // Filtra dirs por tempo e limita quantidade
+    const validDirs = dirs
+      .filter(d => timePeriod === 0 || hasRecentDescendant(d, cutoffTime))
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, itemsPerDir);
+
+    // Filtra files por tempo e limita quantidade
+    const validFiles = files
+      .filter(f => timePeriod === 0 || f.mtime >= cutoffTime)
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, itemsPerDir);
+
+    // Processa dirs filtrados
+    for (const dir of validDirs) {
+      const filteredChild = cloneAndFilter(dir, depth + 1);
+      if (filteredChild) {
+        filteredChildren.push(filteredChild);
+      }
+    }
+
+    // Adiciona files filtrados
+    filteredChildren.push(...validFiles);
+
+    // Calcula quantos ficaram escondidos
+    const totalDirsInOriginal = dirs.length + (placeholders.find(p => p.type === 'more-dirs')?.hiddenDirsCount || 0);
+    const totalFilesInOriginal = files.length + (placeholders.find(p => p.type === 'more-files')?.hiddenFilesCount || 0);
+
+    hiddenDirs = totalDirsInOriginal - validDirs.length;
+    hiddenFiles = totalFilesInOriginal - validFiles.length;
+
+    // Adiciona placeholders se necessário
+    if (hiddenDirs > 0) {
+      filteredChildren.push({
+        name: `... +${hiddenDirs} pastas`,
+        path: `${node.path}/__more_dirs__`,
+        type: 'more-dirs',
+        mtime: 0,
+        hiddenDirsCount: hiddenDirs,
+        totalDirsCount: totalDirsInOriginal
+      });
+    }
+
+    if (hiddenFiles > 0) {
+      filteredChildren.push({
+        name: `... +${hiddenFiles} arquivos`,
+        path: `${node.path}/__more_files__`,
+        type: 'more-files',
+        mtime: 0,
+        hiddenFilesCount: hiddenFiles,
+        totalFilesCount: totalFilesInOriginal
+      });
+    }
+
+    filtered.children = filteredChildren;
+    filtered.hiddenDirsCount = hiddenDirs;
+    filtered.hiddenFilesCount = hiddenFiles;
+    filtered.totalDirsCount = totalDirsInOriginal;
+    filtered.totalFilesCount = totalFilesInOriginal;
+
+    return filtered;
+  }
+
+  // Verifica se um nó ou seus descendentes têm mtime recente
+  function hasRecentDescendant(node, cutoffTime) {
+    if (node.mtime >= cutoffTime) return true;
+    if (!node.children) return false;
+    return node.children.some(child => hasRecentDescendant(child, cutoffTime));
+  }
+
+  return cloneAndFilter(tree);
+}
+
+/**
+ * Aplica os filtros atuais e re-renderiza o grafo
+ */
+async function applyFiltersAndRender() {
+  if (!state.originalTree) return;
+
+  const filteredTree = filterTree(
+    state.originalTree,
+    filterConfig.timePeriod,
+    filterConfig.itemsPerDir
+  );
+
+  await renderGraphFromTree(filteredTree, state.originalRootPath);
+}
+
+/**
+ * Renderiza o grafo a partir de uma árvore processada
+ */
+async function renderGraphFromTree(tree, rootPath) {
   // Limpa containers existentes (destruindo objetos para liberar memória)
   destroyChildren(state.nodesContainer);
   destroyChildren(state.particlesContainer);
@@ -327,7 +452,6 @@ async function renderGraphFromScan(scanResult) {
       () => state.selectedNode,
       (n) => {
         state.selectedNode = n;
-        // Calcula o caminho do nó selecionado até a raiz
         state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
         renderDetails(details, n);
       }
@@ -346,6 +470,21 @@ async function renderGraphFromScan(scanResult) {
   );
 
   animateEntrance(nodes, state.nodeGraphics);
+}
+
+/**
+ * Renderiza o grafo a partir de um resultado de scan
+ */
+async function renderGraphFromScan(scanResult) {
+  const { tree, rootPath } = scanResult;
+
+  // Guarda dados originais para re-aplicar filtros depois
+  state.originalTree = tree;
+  state.originalRootPath = rootPath;
+
+  // Aplica filtros e renderiza
+  const filteredTree = filterTree(tree, filterConfig.timePeriod, filterConfig.itemsPerDir);
+  await renderGraphFromTree(filteredTree, rootPath);
 }
 
 
@@ -538,6 +677,44 @@ function setupLabelCharsControl() {
 }
 
 /**
+ * Configura os controles de filtro (período de tempo e itens por pasta)
+ */
+function setupFilterControls() {
+  const timeFilterContainer = document.getElementById('time-filter');
+  const itemsSlider = document.getElementById('items-per-dir');
+  const itemsValue = document.getElementById('items-per-dir-value');
+
+  if (!timeFilterContainer || !itemsSlider || !itemsValue) return;
+
+  // Inicializa valores
+  itemsSlider.value = filterConfig.itemsPerDir;
+  itemsValue.textContent = filterConfig.itemsPerDir;
+
+  // Botões de período de tempo
+  timeFilterContainer.addEventListener('click', (e) => {
+    const button = e.target.closest('button');
+    if (!button) return;
+
+    // Atualiza visual dos botões
+    timeFilterContainer.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+    button.classList.add('active');
+
+    // Atualiza filtro e re-renderiza
+    const period = parseInt(button.dataset.period, 10);
+    filterConfig.timePeriod = period;
+    applyFiltersAndRender();
+  });
+
+  // Slider de itens por pasta
+  itemsSlider.addEventListener('input', (e) => {
+    const value = parseInt(e.target.value, 10);
+    itemsValue.textContent = value;
+    filterConfig.itemsPerDir = value;
+    applyFiltersAndRender();
+  });
+}
+
+/**
  * Recria os nós visuais com a configuração atual
  */
 function recreateNodes() {
@@ -572,6 +749,7 @@ bootstrap();
 setupScanButtons();
 setupFullscreen();
 setupLabelCharsControl();
+setupFilterControls();
 
 // Monitor de memória na UI
 const memoryBadge = document.getElementById('memory-badge');

@@ -444,8 +444,10 @@ section.right {
 #controls {
   margin-top: 12px;
   display: flex;
-  gap: 20px;
+  gap: 16px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .switch-label {
@@ -554,6 +556,64 @@ section.right {
   min-width: 24px;
   text-align: center;
   font-family: 'Fira Code', 'Consolas', monospace;
+}
+
+/* Grupo de filtros */
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 12px;
+  color: rgba(201, 183, 125, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+/* Botões segmentados (estilo finanças) */
+.segmented-buttons {
+  display: flex;
+  gap: 0;
+  background: rgba(201, 183, 125, 0.1);
+  border: 1px solid rgba(201, 183, 125, 0.3);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented-buttons button {
+  background: transparent;
+  border: none;
+  color: rgba(201, 183, 125, 0.5);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  border-right: 1px solid rgba(201, 183, 125, 0.15);
+}
+
+.segmented-buttons button:last-child {
+  border-right: none;
+}
+
+.segmented-buttons button:hover:not(.active) {
+  background: rgba(201, 183, 125, 0.15);
+  color: rgba(201, 183, 125, 0.8);
+}
+
+.segmented-buttons button.active {
+  background: rgba(201, 183, 125, 0.25);
+  color: #c9b77d;
+  box-shadow: inset 0 0 10px rgba(201, 183, 125, 0.2);
+}
+
+.segmented-buttons button:focus {
+  outline: none;
 }
 
 /* Scrollbar estilizada */

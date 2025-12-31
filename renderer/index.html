@@ -53,6 +53,21 @@
             <input type="range" id="label-max-chars" min="10" max="60" value="30">
             <span class="range-value" id="label-max-chars-value">30</span>
           </label>
+          <div class="filter-group">
+            <span class="filter-label">Modificados em:</span>
+            <div class="segmented-buttons" id="time-filter">
+              <button data-period="3600000" title="Última hora">1H</button>
+              <button data-period="86400000" title="Último dia">1D</button>
+              <button data-period="604800000" title="Última semana">1W</button>
+              <button data-period="2592000000" title="Último mês">1M</button>
+              <button data-period="0" class="active" title="Todos">ALL</button>
+            </div>
+          </div>
+          <label class="range-label">
+            <span class="range-text">Itens por pasta:</span>
+            <input type="range" id="items-per-dir" min="1" max="10" value="3">
+            <span class="range-value" id="items-per-dir-value">3</span>
+          </label>
         </div>
       </section>
       <section class="right">

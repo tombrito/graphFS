@@ -30,3 +30,6 @@ CLAUDE.md
 
 # Scan logs (debug)
 /logs/
+
+# Personal dev notes (not for git)
+dev_notes.md
