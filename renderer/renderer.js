@@ -119,16 +119,35 @@ const state = {
 /**
  * Calcula o caminho de um nó até a raiz e retorna os IDs das edges
  */
+// Cache de lookup para evitar .find() repetitivo
+let pathNodesCache = null;
+let pathNodesCacheSource = null;
+let pathEdgesCache = null;
+let pathEdgesCacheSource = null;
+
 function getPathToRoot(node, edges, nodes) {
+  // Rebuild caches if source arrays changed
+  if (pathNodesCacheSource !== nodes) {
+    pathNodesCache = new Map();
+    nodes.forEach(n => pathNodesCache.set(n.id, n));
+    pathNodesCacheSource = nodes;
+  }
+  if (pathEdgesCacheSource !== edges) {
+    pathEdgesCache = new Map();
+    edges.forEach(e => pathEdgesCache.set(e.target, e));
+    pathEdgesCacheSource = edges;
+  }
+
   const pathEdgeIds = new Set();
   let currentNode = node;
 
   while (currentNode && currentNode.depth > 0) {
-    // Encontrar a edge que conecta este nó ao seu pai
-    const parentEdge = edges.find(e => e.target === currentNode.id);
+    // Encontrar a edge que conecta este nó ao seu pai (via cache)
+    const parentEdge = pathEdgesCache.get(currentNode.id);
     if (parentEdge) {
-      pathEdgeIds.add(`${parentEdge.source}-${parentEdge.target}`);
-      currentNode = nodes.find(n => n.id === parentEdge.source);
+      // Usa edgeId pré-computado se existir, senão cria
+      pathEdgeIds.add(parentEdge.edgeId || `${parentEdge.source}-${parentEdge.target}`);
+      currentNode = pathNodesCache.get(parentEdge.source);
     } else {
       break;
     }
@@ -264,6 +283,12 @@ async function renderGraphFromScan(scanResult) {
   state.selectedNode = null;
   state.activePathEdgeIds = new Set();
   resetEdgeGraphicsCache();
+
+  // Limpa caches de lookup
+  pathNodesCache = null;
+  pathNodesCacheSource = null;
+  pathEdgesCache = null;
+  pathEdgesCacheSource = null;
 
   // Limpa caches de GPU do PixiJS
   cleanupGpuResources();
@@ -569,3 +594,13 @@ async function updateMemoryDisplay() {
 
 setInterval(updateMemoryDisplay, 5000);
 updateMemoryDisplay();
+
+// Limpeza periódica de GPU para sessões longas (a cada 60 segundos)
+setInterval(() => {
+  if (state.app?.renderer) {
+    // Run texture garbage collector
+    if (state.app.renderer.textureGC) {
+      state.app.renderer.textureGC.run();
+    }
+  }
+}, 60000);

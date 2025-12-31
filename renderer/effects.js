@@ -131,6 +131,19 @@ export function createEdgeParticles(edge, source, target, particlesContainer) {
 // ============================================
 // Reutilizar o mesmo Graphics para evitar memory leak
 let cachedEdgeGraphics = null;
+// Cache de lookup de nós por ID para evitar .find() repetitivo
+let nodeIdCache = null;
+let nodeIdCacheNodes = null;
+
+function getNodeById(nodesData, id) {
+  // Rebuild cache if nodes array changed
+  if (nodeIdCacheNodes !== nodesData) {
+    nodeIdCache = new Map();
+    nodesData.forEach(n => nodeIdCache.set(n.id, n));
+    nodeIdCacheNodes = nodesData;
+  }
+  return nodeIdCache.get(id);
+}
 
 export function drawEdges(edgesContainer, edgeData, nodesData, activePathEdgeIds = null) {
   // Criar o Graphics apenas uma vez e reutilizar
@@ -142,50 +155,113 @@ export function drawEdges(edgesContainer, edgeData, nodesData, activePathEdgeIds
   // Limpar o graphics existente (não criar novo)
   cachedEdgeGraphics.clear();
 
+  // Agrupar edges por estilo similar para reduzir trocas de estilo
+  const normalEdges = [];
+  const activeEdges = [];
+  const glowEdges = [];
+
   edgeData.forEach((edge) => {
-    const source = nodesData.find((n) => n.id === edge.source);
-    const target = nodesData.find((n) => n.id === edge.target);
+    const source = getNodeById(nodesData, edge.source);
+    const target = getNodeById(nodesData, edge.target);
 
     if (source && target) {
       const recency = edge.recency || 0.5;
       const isActivePath = activePathEdgeIds && activePathEdgeIds.has(edge.edgeId);
 
-      // Variação da espessura com base na recência
-      // No caminho ativo: linhas mais grossas
-      const glowWidth = isActivePath ? 8 : (2 + recency * 2); // ativo: 8, normal: 2-4
-      const lineWidth = isActivePath ? 3 : (0.8 + recency * 1); // ativo: 3, normal: 0.8-1.8
+      const edgeInfo = { source, target, recency, isActivePath };
 
-      // Variação da opacidade
-      // No caminho ativo: mais opaco; normal: mais sutil
-      const glowAlpha = isActivePath ? 0.35 : (0.05 + recency * 0.08); // ativo: 0.35, normal: 0.05-0.13
-      const lineAlpha = isActivePath ? 0.9 : (0.25 + recency * 0.25); // ativo: 0.9, normal: 0.25-0.5
-
-      // Cor mais brilhante para caminho ativo ou nós muito recentes
-      const edgeColor = isActivePath ? COLORS.edgeGlow : (recency > 0.7 ? COLORS.edgeGlow : COLORS.edge);
-
-      // Glow externo
-      cachedEdgeGraphics.setStrokeStyle({
-        width: glowWidth,
-        color: edgeColor,
-        alpha: glowAlpha,
-        cap: 'round'
-      });
-      cachedEdgeGraphics.moveTo(source.x, source.y);
-      cachedEdgeGraphics.lineTo(target.x, target.y);
-      cachedEdgeGraphics.stroke();
-
-      // Linha principal
-      cachedEdgeGraphics.setStrokeStyle({
-        width: lineWidth,
-        color: edgeColor,
-        alpha: lineAlpha,
-        cap: 'round'
-      });
-      cachedEdgeGraphics.moveTo(source.x, source.y);
-      cachedEdgeGraphics.lineTo(target.x, target.y);
-      cachedEdgeGraphics.stroke();
+      if (isActivePath) {
+        activeEdges.push(edgeInfo);
+      } else if (recency > 0.7) {
+        glowEdges.push(edgeInfo);
+      } else {
+        normalEdges.push(edgeInfo);
+      }
     }
   });
+
+  // Desenhar edges normais (batch com estilo similar)
+  if (normalEdges.length > 0) {
+    // Glow para edges normais
+    cachedEdgeGraphics.setStrokeStyle({
+      width: 3,
+      color: COLORS.edge,
+      alpha: 0.08,
+      cap: 'round'
+    });
+    normalEdges.forEach(({ source, target }) => {
+      cachedEdgeGraphics.moveTo(source.x, source.y);
+      cachedEdgeGraphics.lineTo(target.x, target.y);
+    });
+    cachedEdgeGraphics.stroke();
+
+    // Linha principal para edges normais
+    cachedEdgeGraphics.setStrokeStyle({
+      width: 1.2,
+      color: COLORS.edge,
+      alpha: 0.35,
+      cap: 'round'
+    });
+    normalEdges.forEach(({ source, target }) => {
+      cachedEdgeGraphics.moveTo(source.x, source.y);
+      cachedEdgeGraphics.lineTo(target.x, target.y);
+    });
+    cachedEdgeGraphics.stroke();
+  }
+
+  // Desenhar edges com glow (recentes)
+  if (glowEdges.length > 0) {
+    cachedEdgeGraphics.setStrokeStyle({
+      width: 4,
+      color: COLORS.edgeGlow,
+      alpha: 0.12,
+      cap: 'round'
+    });
+    glowEdges.forEach(({ source, target }) => {
+      cachedEdgeGraphics.moveTo(source.x, source.y);
+      cachedEdgeGraphics.lineTo(target.x, target.y);
+    });
+    cachedEdgeGraphics.stroke();
+
+    cachedEdgeGraphics.setStrokeStyle({
+      width: 1.6,
+      color: COLORS.edgeGlow,
+      alpha: 0.45,
+      cap: 'round'
+    });
+    glowEdges.forEach(({ source, target }) => {
+      cachedEdgeGraphics.moveTo(source.x, source.y);
+      cachedEdgeGraphics.lineTo(target.x, target.y);
+    });
+    cachedEdgeGraphics.stroke();
+  }
+
+  // Desenhar edges ativos (caminho selecionado) - por cima de tudo
+  if (activeEdges.length > 0) {
+    cachedEdgeGraphics.setStrokeStyle({
+      width: 8,
+      color: COLORS.edgeGlow,
+      alpha: 0.35,
+      cap: 'round'
+    });
+    activeEdges.forEach(({ source, target }) => {
+      cachedEdgeGraphics.moveTo(source.x, source.y);
+      cachedEdgeGraphics.lineTo(target.x, target.y);
+    });
+    cachedEdgeGraphics.stroke();
+
+    cachedEdgeGraphics.setStrokeStyle({
+      width: 3,
+      color: COLORS.edgeGlow,
+      alpha: 0.9,
+      cap: 'round'
+    });
+    activeEdges.forEach(({ source, target }) => {
+      cachedEdgeGraphics.moveTo(source.x, source.y);
+      cachedEdgeGraphics.lineTo(target.x, target.y);
+    });
+    cachedEdgeGraphics.stroke();
+  }
 }
 
 // Resetar cache quando trocar de scan
@@ -194,6 +270,9 @@ export function resetEdgeGraphicsCache() {
     cachedEdgeGraphics.destroy();
     cachedEdgeGraphics = null;
   }
+  // Limpa também o cache de lookup de nós
+  nodeIdCache = null;
+  nodeIdCacheNodes = null;
 }
 
 // ============================================
@@ -322,16 +401,30 @@ export function animateOpenFeedback(container) {
 // LOOP DE ANIMAÇÃO PRINCIPAL
 // ============================================
 export function createAnimationLoop(state) {
+  // Cache local para evitar recálculos de recency a cada frame
+  let recencyCache = new Map();
+  let recencyCacheNodes = null;
+
   return (ticker) => {
     state.time += ticker.deltaTime * 0.016;
 
+    // Rebuild recency cache if nodes changed
+    if (recencyCacheNodes !== state.nodesData) {
+      recencyCache.clear();
+      state.nodesData.forEach(n => recencyCache.set(n.id, getRecencyScore(n)));
+      recencyCacheNodes = state.nodesData;
+    }
+
     // Animar estrelas (twinkle) - apenas se habilitado
     if (state.bgAnimEnabled) {
-      state.starsContainer.children.forEach(star => {
+      const stars = state.starsContainer.children;
+      const len = stars.length;
+      for (let i = 0; i < len; i++) {
+        const star = stars[i];
         if (star._twinkleSpeed) {
           star.alpha = star._baseAlpha * (0.5 + 0.5 * Math.sin(state.time * star._twinkleSpeed + star._twinkleOffset));
         }
-      });
+      }
     }
 
     // Desenhar edges (passa caminho ativo para destacar)
@@ -339,15 +432,20 @@ export function createAnimationLoop(state) {
 
     // Animar partículas nas conexões - apenas se habilitado
     if (state.lineAnimEnabled) {
-      state.edgeData.forEach(edge => {
-        const source = state.nodesData.find(n => n.id === edge.source);
-        const target = state.nodesData.find(n => n.id === edge.target);
+      const edgeLen = state.edgeData.length;
+      for (let i = 0; i < edgeLen; i++) {
+        const edge = state.edgeData[i];
+        const source = getNodeById(state.nodesData, edge.source);
+        const target = getNodeById(state.nodesData, edge.target);
 
         if (source && target && edge.particles) {
           // Verificar se esta edge está no caminho ativo
           const isActivePath = state.activePathEdgeIds && state.activePathEdgeIds.has(edge.edgeId);
 
-          edge.particles.forEach(particle => {
+          const particles = edge.particles;
+          const pLen = particles.length;
+          for (let j = 0; j < pLen; j++) {
+            const particle = particles[j];
             // Velocidade: 2.5x mais rápido se no caminho ativo
             const speedMultiplier = isActivePath ? 2.5 : 1;
             particle._progress += particle._speed * speedMultiplier;
@@ -387,17 +485,17 @@ export function createAnimationLoop(state) {
             } else {
               particle.scale.set(baseScale);
             }
-          });
+          }
         }
-      });
+      }
     }
 
     // Pulso suave nos nós (mais intenso para nós recentes)
     state.nodeGraphics.forEach((container, id) => {
-      const node = state.nodesData.find(n => n.id === id);
+      const node = getNodeById(state.nodesData, id);
       if (node && container.children[0]) {
         const glow = container.children[0];
-        const recency = getRecencyScore(node);
+        const recency = recencyCache.get(id) || 0.5;
 
         // Frequência do pulso varia com recência (mais rápido = mais recente)
         const pulseSpeed = 1.5 + recency * 1.5; // 1.5 a 3
