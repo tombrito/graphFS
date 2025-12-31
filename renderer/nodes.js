@@ -1,6 +1,12 @@
 import * as PIXI from '../node_modules/pixi.js/dist/pixi.mjs';
 import { COLORS } from './colors.js';
 
+// Configuração de limite de caracteres nos labels (valores padrão dobrados)
+export const labelConfig = {
+  maxCharsRoot: 40,    // antes: 20
+  maxCharsNode: 30     // antes: 15
+};
+
 export function createFolderIcon(color, isRoot) {
   const icon = new PIXI.Graphics();
   const scale = isRoot ? 1.2 : 0.8;
@@ -207,7 +213,7 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   const labelContainer = new PIXI.Container();
 
   const label = new PIXI.Text({
-    text: isMoreNode ? node.name : truncateName(node.name, isRoot ? 20 : 15),
+    text: isMoreNode ? node.name : truncateName(node.name, isRoot ? labelConfig.maxCharsRoot : labelConfig.maxCharsNode),
     style: {
       fontFamily: 'Segoe UI, Arial, sans-serif',
       fontSize: isRoot ? 14 : (isMoreNode ? 10 : 11),

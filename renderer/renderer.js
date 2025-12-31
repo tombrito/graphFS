@@ -2,7 +2,7 @@
 
 import { COLORS, updateMtimeRange } from './colors.js';
 import { flattenTree, layoutNodesForce } from './graph-layout.js';
-import { createNode } from './nodes.js';
+import { createNode, labelConfig } from './nodes.js';
 import { createStarfield, createNebula, createEdgeParticles, animateEntrance, createAnimationLoop, resetEdgeGraphicsCache, animateOpenFeedback } from './effects.js';
 import { createPixiApp, centerGraphInView, applyZoom, setupZoomControls, setupPanControls } from './pixi-app.js';
 import { renderNotice, renderDetails, renderTree, setupAnimationControls } from './ui.js';
@@ -22,6 +22,17 @@ const modalTitle = document.getElementById('modal-title');
 const modalBody = document.getElementById('modal-body');
 const modalClose = document.getElementById('modal-close');
 const btnFullscreen = document.getElementById('btn-fullscreen');
+
+/**
+ * Remove e destrói todos os filhos de um container PixiJS para liberar memória
+ */
+function destroyChildren(container) {
+  while (container.children.length > 0) {
+    const child = container.children[0];
+    container.removeChild(child);
+    child.destroy({ children: true, texture: false, baseTexture: false });
+  }
+}
 
 // Estado global da aplicação
 const state = {
@@ -183,10 +194,10 @@ async function initPixiApp() {
 async function renderGraphFromScan(scanResult) {
   const { tree, rootPath } = scanResult;
 
-  // Limpa containers existentes
-  state.nodesContainer.removeChildren();
-  state.particlesContainer.removeChildren();
-  state.edgesContainer.removeChildren();
+  // Limpa containers existentes (destruindo objetos para liberar memória)
+  destroyChildren(state.nodesContainer);
+  destroyChildren(state.particlesContainer);
+  destroyChildren(state.edgesContainer);
   state.nodeGraphics.clear();
   state.selectedNode = null;
   state.activePathEdgeIds = new Set();
@@ -410,9 +421,64 @@ function setupFullscreen() {
   });
 }
 
+/**
+ * Configura o controle de caracteres máximos no label
+ */
+function setupLabelCharsControl() {
+  const slider = document.getElementById('label-max-chars');
+  const valueDisplay = document.getElementById('label-max-chars-value');
+
+  if (!slider || !valueDisplay) return;
+
+  // Inicializa com o valor do labelConfig
+  slider.value = labelConfig.maxCharsNode;
+  valueDisplay.textContent = labelConfig.maxCharsNode;
+
+  slider.addEventListener('input', (e) => {
+    const value = parseInt(e.target.value, 10);
+    valueDisplay.textContent = value;
+
+    // Atualiza a configuração (root fica 33% maior que nodes)
+    labelConfig.maxCharsNode = value;
+    labelConfig.maxCharsRoot = Math.round(value * 1.33);
+
+    // Recria os nós para aplicar o novo limite
+    recreateNodes();
+  });
+}
+
+/**
+ * Recria os nós visuais com a configuração atual
+ */
+function recreateNodes() {
+  if (state.nodesData.length === 0) return;
+
+  // Limpa nós existentes (destruindo para liberar memória)
+  destroyChildren(state.nodesContainer);
+  state.nodeGraphics.clear();
+
+  // Recria todos os nós
+  state.nodesData.forEach((node) => {
+    const nodeContainer = createNode(
+      node,
+      state.nodesData,
+      state.nodeGraphics,
+      () => state.selectedNode,
+      (n) => {
+        state.selectedNode = n;
+        state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
+        renderDetails(details, n);
+      }
+    );
+    state.nodesContainer.addChild(nodeContainer);
+    state.nodeGraphics.set(node.id, nodeContainer);
+  });
+}
+
 bootstrap();
 setupScanButtons();
 setupFullscreen();
+setupLabelCharsControl();
 
 // Monitor de memória na UI
 const memoryBadge = document.getElementById('memory-badge');
