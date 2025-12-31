@@ -366,13 +366,7 @@ function setupScanButtons() {
  * Configura o modo fullscreen do grafo
  */
 function setupFullscreen() {
-  let isFullscreen = false;
-
-  const toggleFullscreen = () => {
-    isFullscreen = !isFullscreen;
-    pixiContainer.classList.toggle('fullscreen', isFullscreen);
-
-    // Atualiza o ícone do botão
+  const updateButtonIcon = (isFullscreen) => {
     if (isFullscreen) {
       btnFullscreen.innerHTML = `
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -388,21 +382,30 @@ function setupFullscreen() {
       `;
       btnFullscreen.title = 'Tela cheia (ESC para sair)';
     }
+  };
 
-    // Redimensiona o canvas do PixiJS
-    if (state.app) {
-      const rect = pixiContainer.getBoundingClientRect();
-      state.app.renderer.resize(rect.width, rect.height);
+  const toggleFullscreen = async () => {
+    if (!document.fullscreenElement) {
+      await pixiContainer.requestFullscreen();
+    } else {
+      await document.exitFullscreen();
     }
   };
 
   // Clique no botão
   btnFullscreen.addEventListener('click', toggleFullscreen);
 
-  // ESC para sair do fullscreen
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && isFullscreen) {
-      toggleFullscreen();
+  // Detecta mudanças de fullscreen (incluindo ESC do browser)
+  document.addEventListener('fullscreenchange', () => {
+    const isFullscreen = !!document.fullscreenElement;
+    updateButtonIcon(isFullscreen);
+
+    // Redimensiona o canvas do PixiJS
+    if (state.app) {
+      setTimeout(() => {
+        const rect = pixiContainer.getBoundingClientRect();
+        state.app.renderer.resize(rect.width, rect.height);
+      }, 100);
     }
   });
 }

@@ -255,16 +255,13 @@ section.right {
   user-select: none;
 }
 
-/* Fullscreen mode */
-#pixi-container.fullscreen {
-  position: fixed;
-  top: 0;
-  left: 0;
+/* Fullscreen mode (Web Fullscreen API) */
+#pixi-container:fullscreen {
   width: 100vw;
   height: 100vh;
   border: none;
   border-radius: 0;
-  z-index: 9999;
+  background: #000008;
 }
 
 /* Fullscreen button */
