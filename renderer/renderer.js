@@ -828,9 +828,11 @@ function expandPlaceholder(placeholderNode) {
   updateMtimeRange(state.nodesData);
 
   // Cria partículas para as novas edges
+  // Usa Map temporário para lookup O(1) em vez de .find() O(n)
+  const nodesById = new Map(state.nodesData.map(n => [n.id, n]));
   newEdges.forEach(edge => {
-    const source = state.nodesData.find(n => n.id === edge.source);
-    const target = state.nodesData.find(n => n.id === edge.target);
+    const source = nodesById.get(edge.source);
+    const target = nodesById.get(edge.target);
     if (source && target) {
       createEdgeParticles(edge, source, target, state.particlesContainer);
     }
