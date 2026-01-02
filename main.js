@@ -1,8 +1,127 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { spawn } = require('child_process');
+const readline = require('readline');
 const { searchEngineManager } = require('./search-engines');
+
+// Path to context menu executable (Windows only)
+const CONTEXT_MENU_EXE = path.join(__dirname, 'bin', 'context-menu.exe');
+
+// Persistent context menu process
+let contextMenuProcess = null;
+let contextMenuReady = false;
+let waitingQueue = [];   // Requests waiting for server to be ready
+let pendingQueue = [];   // Requests sent, waiting for response
+
+/**
+ * Start the persistent context menu server process
+ */
+function startContextMenuServer() {
+  if (process.platform !== 'win32') return;
+  if (contextMenuProcess) return;  // Already running
+  if (!fs.existsSync(CONTEXT_MENU_EXE)) {
+    console.warn('[ContextMenu] Executable not found:', CONTEXT_MENU_EXE);
+    return;
+  }
+
+  contextMenuProcess = spawn(CONTEXT_MENU_EXE, [], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: false
+  });
+
+  // Read responses line by line
+  const rl = readline.createInterface({ input: contextMenuProcess.stdout });
+
+  rl.on('line', (line) => {
+    try {
+      const response = JSON.parse(line);
+
+      if (response.ready) {
+        contextMenuReady = true;
+        console.log('[ContextMenu] Server ready');
+        // Process any waiting requests
+        while (waitingQueue.length > 0) {
+          const req = waitingQueue.shift();
+          pendingQueue.push(req);
+          contextMenuProcess.stdin.write(req.command + '\n');
+        }
+        return;
+      }
+
+      if (response.pong) {
+        return;
+      }
+
+      // Handle result/error responses
+      if (pendingQueue.length > 0) {
+        const { resolve } = pendingQueue.shift();
+        if (response.error) {
+          resolve({ success: false, error: response.error });
+        } else {
+          resolve({ success: true, commandId: response.result });
+        }
+      }
+    } catch (e) {
+      console.error('[ContextMenu] Parse error:', e.message);
+    }
+  });
+
+  contextMenuProcess.stderr.on('data', (data) => {
+    // Ignore stderr (shell extension noise)
+  });
+
+  contextMenuProcess.on('close', (code) => {
+    console.log('[ContextMenu] Server exited with code:', code);
+    contextMenuProcess = null;
+    contextMenuReady = false;
+
+    // Reject any pending requests
+    while (pendingQueue.length > 0) {
+      const { resolve } = pendingQueue.shift();
+      resolve({ success: false, error: 'Context menu server exited' });
+    }
+    while (waitingQueue.length > 0) {
+      const { resolve } = waitingQueue.shift();
+      resolve({ success: false, error: 'Context menu server exited' });
+    }
+  });
+
+  contextMenuProcess.on('error', (err) => {
+    console.error('[ContextMenu] Server error:', err.message);
+  });
+}
+
+/**
+ * Send a command to the context menu server
+ */
+function sendContextMenuCommand(command, resolve) {
+  if (!contextMenuProcess) {
+    waitingQueue.push({ command, resolve });
+    startContextMenuServer();
+    return;
+  }
+
+  if (!contextMenuReady) {
+    waitingQueue.push({ command, resolve });
+    return;
+  }
+
+  pendingQueue.push({ command, resolve });
+  contextMenuProcess.stdin.write(command + '\n');
+}
+
+/**
+ * Stop the context menu server
+ */
+function stopContextMenuServer() {
+  if (contextMenuProcess) {
+    contextMenuProcess.stdin.write('quit\n');
+    contextMenuProcess = null;
+    contextMenuReady = false;
+  }
+}
 
 // Arquivo para persistir o último scan
 let LAST_SCAN_FILE;
@@ -40,8 +159,11 @@ function loadLastScan() {
 
 const ROOT_PATH = process.env.GRAPHFS_ROOT || 'C:\\tmp';
 
+// Global reference to main window (needed for context menu HWND)
+let mainWindow = null;
+
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -238,6 +360,9 @@ app.whenReady().then(async () => {
     console.error('[Startup] Erro ao iniciar Everything:', error.message);
   }
 
+  // Start context menu server early for faster first response
+  startContextMenuServer();
+
   // Handler original para árvore do filesystem (legado)
   ipcMain.handle('fs-tree', () => tryBuildRoot());
 
@@ -391,6 +516,113 @@ app.whenReady().then(async () => {
     }
   });
 
+  // Menu de contexto rápido (híbrido) - instantâneo com opções básicas
+  ipcMain.handle('shell:show-quick-menu', async (event, filePath, isDirectory, x, y) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+
+    const menuTemplate = [
+      {
+        label: 'Abrir',
+        click: () => {
+          shell.openPath(filePath);
+        }
+      },
+      {
+        label: 'Abrir local da pasta',
+        click: () => {
+          shell.showItemInFolder(filePath);
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Copiar caminho',
+        click: () => {
+          clipboard.writeText(filePath);
+        }
+      },
+      {
+        label: 'Copiar nome',
+        click: () => {
+          clipboard.writeText(path.basename(filePath));
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Excluir',
+        click: async () => {
+          try {
+            await shell.trashItem(filePath);
+            // Notify renderer that item was deleted
+            win?.webContents.send('file-deleted', filePath);
+          } catch (err) {
+            console.error('[QuickMenu] Delete failed:', err);
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Propriedades',
+        click: () => {
+          // Use shell context menu server to show properties
+          if (process.platform === 'win32' && fs.existsSync(CONTEXT_MENU_EXE)) {
+            const escapedPath = filePath.replace(/\\/g, '\\\\');
+            // Send special command to open properties directly
+            const command = `{"path":"${escapedPath}","x":${Math.round(x)},"y":${Math.round(y)},"verb":"properties"}`;
+            sendContextMenuCommand(command, () => {});
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Menu completo do Windows...',
+        click: () => {
+          // Show full Windows shell context menu
+          if (process.platform === 'win32' && fs.existsSync(CONTEXT_MENU_EXE)) {
+            const escapedPath = filePath.replace(/\\/g, '\\\\');
+            const command = `{"path":"${escapedPath}","x":${Math.round(x)},"y":${Math.round(y)}}`;
+            sendContextMenuCommand(command, () => {});
+          }
+        }
+      }
+    ];
+
+    const menu = Menu.buildFromTemplate(menuTemplate);
+    menu.popup({ window: win });  // Uses current mouse position
+
+    return { success: true };
+  });
+
+  // Mostra o menu de contexto nativo do Windows para um arquivo/pasta (full shell menu)
+  ipcMain.handle('shell:show-context-menu', async (event, filePath, x, y) => {
+    // Only available on Windows
+    if (process.platform !== 'win32') {
+      return { success: false, error: 'Context menu only available on Windows' };
+    }
+
+    // Check if executable exists
+    if (!fs.existsSync(CONTEXT_MENU_EXE)) {
+      return {
+        success: false,
+        error: 'context-menu.exe not found. Please run: npm run build-context-menu'
+      };
+    }
+
+    try {
+      // Escape backslashes for JSON
+      const escapedPath = filePath.replace(/\\/g, '\\\\');
+      const command = `{"path":"${escapedPath}","x":${Math.round(x)},"y":${Math.round(y)}}`;
+
+      return new Promise((resolve) => {
+        sendContextMenuCommand(command, resolve);
+      });
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Start context menu server proactively
+  startContextMenuServer();
+
   createWindow();
 
   app.on('activate', () => {
@@ -404,4 +636,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  stopContextMenuServer();
 });

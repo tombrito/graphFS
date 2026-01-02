@@ -42,6 +42,13 @@ contextBridge.exposeInMainWorld('graphfs', {
     openPath: (targetPath) => ipcRenderer.invoke('shell:open-path', targetPath),
 
     // Mostra o item no File Explorer (selecionado)
-    showItemInFolder: (targetPath) => ipcRenderer.invoke('shell:show-item-in-folder', targetPath)
+    showItemInFolder: (targetPath) => ipcRenderer.invoke('shell:show-item-in-folder', targetPath),
+
+    // Mostra o menu de contexto nativo do Windows para um arquivo/pasta
+    // x, y são coordenadas de tela (screenX, screenY do evento de mouse)
+    showContextMenu: (filePath, x, y) => ipcRenderer.invoke('shell:show-context-menu', filePath, x, y),
+
+    // Menu rápido híbrido - instantâneo com opções básicas + acesso ao menu completo
+    showQuickMenu: (filePath, isDirectory, x, y) => ipcRenderer.invoke('shell:show-quick-menu', filePath, isDirectory, x, y)
   }
 });

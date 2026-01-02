@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "postinstall": "node scripts/download-everything-cli.js",
-    "download-es": "node scripts/download-everything-cli.js"
+    "download-es": "node scripts/download-everything-cli.js",
+    "build-context-menu": "node scripts/build-context-menu.js"
   },
   "author": "",
   "license": "MIT",

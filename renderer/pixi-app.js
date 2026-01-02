@@ -23,6 +23,11 @@ export async function createPixiApp(pixiContainer) {
   }
   pixiContainer.appendChild(app.canvas);
 
+  // Disable browser's default context menu on the canvas
+  app.canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+  });
+
   // Criar containers em ordem de camadas
   const worldContainer = new PIXI.Container();
   const starsContainer = new PIXI.Container();

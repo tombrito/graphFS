@@ -323,7 +323,10 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
     }
   });
 
-  container.on('pointertap', () => {
+  container.on('pointertap', (event) => {
+    // Ignore right-click (handled separately for context menu)
+    if (event.button === 2) return;
+
     const currentSelected = selectedNode();
     if (currentSelected && nodeGraphics.has(currentSelected.id)) {
       const prevContainer = nodeGraphics.get(currentSelected.id);
@@ -337,6 +340,34 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
     container.scale.set(1.1);
     container._outerGlow.visible = true;
     container._ring.alpha = 1;
+  });
+
+  // Right-click context menu (hybrid quick menu)
+  container.on('pointerdown', async (event) => {
+    // Only handle right-click (button 2)
+    if (event.button !== 2) return;
+
+    // Only for real files/directories, not placeholder nodes
+    if (isMoreNode) return;
+
+    // Get coordinates from the native event
+    const nativeEvent = event.nativeEvent || event.data?.originalEvent;
+    if (!nativeEvent) return;
+
+    // Use client coordinates for Electron menu, screen coordinates for shell menu
+    const clientX = nativeEvent.clientX;
+    const clientY = nativeEvent.clientY;
+    const screenX = nativeEvent.screenX;
+    const screenY = nativeEvent.screenY;
+
+    // Use quick hybrid menu (instant) - passes screen coords for "full menu" option
+    if (window.graphfs?.shell?.showQuickMenu) {
+      try {
+        await window.graphfs.shell.showQuickMenu(node.path, isDirectory, screenX, screenY);
+      } catch (err) {
+        console.error('[ContextMenu] Failed:', err);
+      }
+    }
   });
 
   return container;
