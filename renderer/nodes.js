@@ -126,7 +126,7 @@ function truncateName(name, maxLength) {
   return name.substring(0, maxLength - 1) + '…';
 }
 
-export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDetails) {
+export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDetails, onExpandPlaceholder = null) {
   const container = new PIXI.Container();
   container.x = node.x;
   container.y = node.y;
@@ -137,6 +137,7 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   const isMoreDirs = node.type === 'more-dirs';
   const isMoreFiles = node.type === 'more-files';
   const isMoreNode = isMoreDirs || isMoreFiles;
+  const isExpandedItem = node.isExpandedItem === true; // Nó que veio de expansão (estilo muted)
 
   const baseRadius = isRoot ? 35 : (isDirectory ? 22 : (isMoreNode ? 18 : 14));
   const color = isRoot ? COLORS.rootNode :
@@ -163,11 +164,17 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
 
   // Círculo principal
   const body = new PIXI.Graphics();
-  if (isMoreNode) {
-    // Nós "more" são mais discretos e vazados
-    body.beginFill(color, 0.15);
+  if (isMoreNode || isExpandedItem) {
+    // Nós "more" e nós expandidos são mais discretos e vazados
+    body.beginFill(color, isExpandedItem ? 0.25 : 0.15);
     body.drawCircle(0, 0, baseRadius);
     body.endFill();
+    // Nós expandidos tem um leve brilho central
+    if (isExpandedItem) {
+      body.beginFill(0xffffff, 0.1);
+      body.drawCircle(0, 0, baseRadius * 0.4);
+      body.endFill();
+    }
   } else {
     body.beginFill(color, 0.5);
     body.drawCircle(0, 0, baseRadius);
@@ -182,7 +189,7 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   container.addChild(body);
   container._body = body;
 
-  // Anel (borda pontilhada para nós "more")
+  // Anel (borda pontilhada para nós "more", semi-transparente para expandidos)
   const ring = new PIXI.Graphics();
   if (isMoreNode) {
     // Borda pontilhada para nós "more"
@@ -195,6 +202,11 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
       ring.moveTo(Math.cos(angle1) * radius, Math.sin(angle1) * radius);
       ring.lineTo(Math.cos(angle2) * radius, Math.sin(angle2) * radius);
     }
+    ring.stroke();
+  } else if (isExpandedItem) {
+    // Borda semi-transparente para nós expandidos
+    ring.setStrokeStyle({ width: 1, color: color, alpha: 0.4 });
+    ring.drawCircle(0, 0, baseRadius + 2);
     ring.stroke();
   } else {
     ring.setStrokeStyle({ width: 1.5, color: COLORS.edge, alpha: 0.6 });
@@ -212,14 +224,15 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   // Label - posicionado para fora do centro do grafo
   const labelContainer = new PIXI.Container();
 
+  const isMutedStyle = isMoreNode || isExpandedItem;
   const label = new PIXI.Text({
     text: isMoreNode ? node.name : truncateName(node.name, isRoot ? labelConfig.maxCharsRoot : labelConfig.maxCharsNode),
     style: {
       fontFamily: 'Segoe UI, Arial, sans-serif',
-      fontSize: isRoot ? 14 : (isMoreNode ? 10 : 11),
-      fill: isMoreNode ? COLORS.textMuted : COLORS.text,
+      fontSize: isRoot ? 14 : (isMutedStyle ? 10 : 11),
+      fill: isMutedStyle ? COLORS.textMuted : COLORS.text,
       align: 'center',
-      fontStyle: isMoreNode ? 'italic' : 'normal'
+      fontStyle: isMutedStyle ? 'italic' : 'normal'
     },
     resolution: 3
   });
@@ -286,7 +299,7 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   labelContainer.pivot.x = (label.width + padding.x * 2) * anchorX - padding.x;
   labelContainer.pivot.y = (label.height + padding.y * 2) * anchorY - padding.y;
 
-  labelContainer.alpha = isMoreNode ? 0.6 : 0.8;
+  labelContainer.alpha = isMutedStyle ? 0.6 : 0.8;
   container.addChild(labelContainer);
   container._label = labelContainer;
 
@@ -326,6 +339,12 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   container.on('pointertap', (event) => {
     // Ignore right-click (handled separately for context menu)
     if (event.button === 2) return;
+
+    // Se é um nó placeholder com itens ocultos e temos callback, expande ao clicar
+    if (isMoreNode && node.hiddenItems && node.hiddenItems.length > 0 && onExpandPlaceholder) {
+      onExpandPlaceholder(node);
+      return;
+    }
 
     const currentSelected = selectedNode();
     if (currentSelected && nodeGraphics.has(currentSelected.id)) {

@@ -333,12 +333,23 @@ function filterTree(tree, timePeriod, itemsPerDir) {
     // Adiciona files filtrados
     filteredChildren.push(...validFiles);
 
-    // Calcula quantos ficaram escondidos
+    // Calcula totais originais (para informação)
     const totalDirsInOriginal = dirs.length + (placeholders.find(p => p.type === 'more-dirs')?.hiddenDirsCount || 0);
     const totalFilesInOriginal = files.length + (placeholders.find(p => p.type === 'more-files')?.hiddenFilesCount || 0);
 
-    hiddenDirs = totalDirsInOriginal - validDirs.length;
-    hiddenFiles = totalFilesInOriginal - validFiles.length;
+    // Coleta os dados dos itens ocultos (que passaram no filtro de tempo mas não estão no top N)
+    const hiddenDirItems = dirsPassedTime
+      .sort((a, b) => getMaxDescendantMtime(b) - getMaxDescendantMtime(a))
+      .slice(itemsPerDir)
+      .map(d => ({ ...d, children: d.children || [] }));
+
+    const hiddenFileItems = filesPassedTime
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(itemsPerDir);
+
+    // Conta ocultos baseado nos itens que realmente passaram no filtro
+    hiddenDirs = hiddenDirItems.length;
+    hiddenFiles = hiddenFileItems.length;
 
     // Adiciona placeholders se necessário
     if (hiddenDirs > 0) {
@@ -348,7 +359,8 @@ function filterTree(tree, timePeriod, itemsPerDir) {
         type: 'more-dirs',
         mtime: 0,
         hiddenDirsCount: hiddenDirs,
-        totalDirsCount: totalDirsInOriginal
+        totalDirsCount: totalDirsInOriginal,
+        hiddenItems: hiddenDirItems
       });
     }
 
@@ -359,7 +371,8 @@ function filterTree(tree, timePeriod, itemsPerDir) {
         type: 'more-files',
         mtime: 0,
         hiddenFilesCount: hiddenFiles,
-        totalFilesCount: totalFilesInOriginal
+        totalFilesCount: totalFilesInOriginal,
+        hiddenItems: hiddenFileItems
       });
     }
 
@@ -473,7 +486,8 @@ async function renderGraphFromTree(tree, rootPath) {
         state.selectedNode = n;
         state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
         renderDetails(details, n);
-      }
+      },
+      expandPlaceholder // Callback para expandir placeholders ao clicar
     );
     state.nodesContainer.addChild(nodeContainer);
     state.nodeGraphics.set(node.id, nodeContainer);
@@ -736,11 +750,179 @@ function recreateNodes() {
         state.selectedNode = n;
         state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
         renderDetails(details, n);
-      }
+      },
+      expandPlaceholder // Callback para expandir placeholders ao clicar
     );
     state.nodesContainer.addChild(nodeContainer);
     state.nodeGraphics.set(node.id, nodeContainer);
   });
+}
+
+/**
+ * Expande um nó placeholder (+x arquivos/pastas) para mostrar os itens ocultos
+ * Os novos nós aparecem com estilo muted (menos destaque)
+ */
+function expandPlaceholder(placeholderNode) {
+  if (!placeholderNode || !placeholderNode.hiddenItems || placeholderNode.hiddenItems.length === 0) {
+    console.log('[Expand] Nenhum item oculto para expandir');
+    return;
+  }
+
+  const hiddenItems = placeholderNode.hiddenItems;
+  const parentId = placeholderNode.parentId;
+  const placeholderDepth = placeholderNode.depth;
+
+  // Encontra o container visual do placeholder
+  const placeholderContainer = state.nodeGraphics.get(placeholderNode.id);
+  if (!placeholderContainer) return;
+
+  // Posição base: perto do placeholder
+  const baseX = placeholderNode.x;
+  const baseY = placeholderNode.y;
+
+  // Cria os novos nós
+  const newNodes = [];
+  const newEdges = [];
+
+  hiddenItems.forEach((item, index) => {
+    // Distribui os nós em semicírculo a partir do placeholder
+    const angle = (index / Math.max(hiddenItems.length - 1, 1)) * Math.PI - Math.PI / 2;
+    const radius = 80 + (index % 3) * 30; // Espaçamento variado
+
+    const newNode = {
+      id: item.path,
+      path: item.path,
+      name: item.name,
+      type: item.type,
+      depth: placeholderDepth,
+      parentId: parentId,
+      mtime: item.mtime,
+      childCount: 0,
+      hiddenFilesCount: 0,
+      hiddenDirsCount: 0,
+      totalFilesCount: 0,
+      totalDirsCount: 0,
+      isExpandedItem: true, // Marca como item expandido (estilo muted)
+      x: baseX + Math.cos(angle) * radius,
+      y: baseY + Math.sin(angle) * radius,
+      labelAngle: angle
+    };
+
+    newNodes.push(newNode);
+
+    // Cria edge do pai para o novo nó
+    const newEdge = {
+      source: parentId,
+      target: newNode.id,
+      particles: [],
+      edgeId: `${parentId}-${newNode.id}`
+    };
+    newEdges.push(newEdge);
+  });
+
+  // Adiciona aos dados globais
+  state.nodesData.push(...newNodes);
+  state.edgeData.push(...newEdges);
+
+  // Recalcula mtime range para cores corretas
+  updateMtimeRange(state.nodesData);
+
+  // Cria partículas para as novas edges
+  newEdges.forEach(edge => {
+    const source = state.nodesData.find(n => n.id === edge.source);
+    const target = state.nodesData.find(n => n.id === edge.target);
+    if (source && target) {
+      createEdgeParticles(edge, source, target, state.particlesContainer);
+    }
+  });
+
+  // Cria os containers visuais para os novos nós
+  newNodes.forEach(node => {
+    const nodeContainer = createNode(
+      node,
+      state.nodesData,
+      state.nodeGraphics,
+      () => state.selectedNode,
+      (n) => {
+        state.selectedNode = n;
+        state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
+        renderDetails(details, n);
+      },
+      expandPlaceholder // Callback para expansão recursiva
+    );
+    state.nodesContainer.addChild(nodeContainer);
+    state.nodeGraphics.set(node.id, nodeContainer);
+
+    // Anima a entrada dos novos nós
+    nodeContainer.alpha = 0;
+    nodeContainer.scale.set(0.5);
+  });
+
+  // Animação de entrada suave
+  let progress = 0;
+  const animateIn = () => {
+    progress += 0.05;
+    if (progress >= 1) {
+      newNodes.forEach(node => {
+        const container = state.nodeGraphics.get(node.id);
+        if (container) {
+          container.alpha = 1;
+          container.scale.set(1);
+        }
+      });
+      return;
+    }
+
+    const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+    newNodes.forEach(node => {
+      const container = state.nodeGraphics.get(node.id);
+      if (container) {
+        container.alpha = easeProgress;
+        container.scale.set(0.5 + easeProgress * 0.5);
+      }
+    });
+
+    requestAnimationFrame(animateIn);
+  };
+  requestAnimationFrame(animateIn);
+
+  // Remove o placeholder
+  deepDestroy(placeholderContainer);
+  state.nodeGraphics.delete(placeholderNode.id);
+
+  // Remove o placeholder dos dados
+  const placeholderIndex = state.nodesData.findIndex(n => n.id === placeholderNode.id);
+  if (placeholderIndex !== -1) {
+    state.nodesData.splice(placeholderIndex, 1);
+  }
+
+  // Remove a edge do placeholder e suas partículas
+  const placeholderEdgeIndex = state.edgeData.findIndex(e => e.target === placeholderNode.id);
+  if (placeholderEdgeIndex !== -1) {
+    const placeholderEdge = state.edgeData[placeholderEdgeIndex];
+    // Destrói as partículas da edge do placeholder
+    if (placeholderEdge.particles) {
+      placeholderEdge.particles.forEach(particle => {
+        if (particle.parent) {
+          particle.parent.removeChild(particle);
+        }
+        particle.destroy();
+      });
+      placeholderEdge.particles = [];
+    }
+    state.edgeData.splice(placeholderEdgeIndex, 1);
+  }
+
+  // Limpa caches de lookup
+  pathNodesCache = null;
+  pathNodesCacheSource = null;
+  pathEdgesCache = null;
+  pathEdgesCacheSource = null;
+
+  // Reseta cache de gráficos de edges para redesenhar com as novas edges
+  resetEdgeGraphicsCache();
+
+  console.log(`[Expand] Expandiu ${newNodes.length} itens de ${placeholderNode.name}`);
 }
 
 bootstrap();

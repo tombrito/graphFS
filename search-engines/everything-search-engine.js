@@ -318,11 +318,20 @@ class EverythingSearchEngine extends BaseSearchEngine {
 
       // Placeholder para diretórios ocultos
       if (hiddenDirCount > 0) {
+        // Guarda os dados dos diretórios ocultos para expansão posterior
+        const hiddenDirs = children.dirs.slice(topDirsPerDir);
         node.children.push({
           name: `... +${hiddenDirCount} ${hiddenDirCount === 1 ? 'pasta' : 'pastas'}`,
           path: `${nodePath}/__more_dirs__`,
           type: 'more-dirs',
           hiddenCount: hiddenDirCount,
+          hiddenItems: hiddenDirs.map(dir => ({
+            name: path.basename(dir.path),
+            path: dir.path,
+            type: 'directory',
+            mtime: dir.mtime,
+            children: [] // Será populado se necessário
+          })),
           mtime: 0
         });
       }
@@ -342,11 +351,19 @@ class EverythingSearchEngine extends BaseSearchEngine {
 
       // Placeholder para arquivos ocultos
       if (hiddenFileCount > 0) {
+        // Guarda os dados dos arquivos ocultos para expansão posterior
+        const hiddenFiles = children.files.slice(topFilesPerDir);
         node.children.push({
           name: `... +${hiddenFileCount} ${hiddenFileCount === 1 ? 'arquivo' : 'arquivos'}`,
           path: `${nodePath}/__more_files__`,
           type: 'more-files',
           hiddenCount: hiddenFileCount,
+          hiddenItems: hiddenFiles.map(file => ({
+            name: file.name,
+            path: file.path,
+            type: 'file',
+            mtime: file.mtime
+          })),
           mtime: 0
         });
       }
