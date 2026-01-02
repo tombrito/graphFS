@@ -8,22 +8,17 @@
 - **Impacto:** Quando usuário exclui arquivo pelo menu "Excluir", o nó permanece no grafo
 - **Solução:** Adicionar listener no preload.js e handler no renderer para remover o nó
 
-### 2. mtime fictício no Everything engine
-- **Arquivo:** `search-engines/everything-search-engine.js:203`
-- **Problema:** Usa `Date.now()` ao invés da data real do arquivo
-- **Impacto:** Ordenação por data de modificação não funciona corretamente
-
 ---
 
 ## Dead Code (Código Sobrando)
 
-### 3. API `showContextMenu` não usada
+### 2. API `showContextMenu` não usada
 - **Arquivo:** `preload.js:46`
 - **Problema:** `showContextMenu` exposto mas nunca chamado no renderer
 - **Contexto:** Substituído por `showQuickMenu` (menu híbrido)
 - **Solução:** Remover a linha
 
-### 4. Handler `shell:show-context-menu` não usado
+### 3. Handler `shell:show-context-menu` não usado
 - **Arquivo:** `main.js:429-455`
 - **Problema:** Handler IPC nunca chamado (showQuickMenu usa `sendContextMenuCommand` diretamente)
 - **Solução:** Remover o handler (~26 linhas)
@@ -32,7 +27,7 @@
 
 ## Refactoring
 
-### 5. Console.log excessivos (~50+)
+### 4. Console.log excessivos (~50+)
 - **Arquivos:** Vários (main.js, renderer.js, search-engines/*.js)
 - **Sugestão:** Criar flag DEBUG ou remover logs não críticos
 - **Prioridade:** Média
@@ -41,7 +36,7 @@
 
 ## Futuro (Baixa Prioridade)
 
-### 6. Suporte Linux/macOS
+### 5. Suporte Linux/macOS
 - **Arquivo:** `search-engines/search-engine-manager.js:27-28`
 - **TODOs:**
   - Linux: mlocate, plocate

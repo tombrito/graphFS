@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('graphfs', {
+  // Debug logging (envia para main process)
+  log: (...args) => ipcRenderer.send('debug:log', ...args),
+
   // API de sistema
   getMemoryUsage: () => ipcRenderer.invoke('system:memory-usage'),
 

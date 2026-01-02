@@ -22,12 +22,33 @@ const EVERYTHING_REQUEST_PATH = 0x00000002;
 const EVERYTHING_REQUEST_SIZE = 0x00000010;
 const EVERYTHING_REQUEST_DATE_MODIFIED = 0x00000040;
 
+// Constante para conversão FILETIME -> Unix timestamp
+// FILETIME: 100-nanosegundos desde 1/1/1601
+// Unix: milissegundos desde 1/1/1970
+// Diferença: 116444736000000000 (em 100ns)
+const FILETIME_EPOCH_DIFF = BigInt('116444736000000000');
+
 class EverythingSearchEngine extends BaseSearchEngine {
   constructor() {
     super('Everything');
     this.dll = null;
+    this.ref = null; // ref-napi module
     this.initialized = false;
     this.cancelled = false;
+  }
+
+  /**
+   * Converte FILETIME (Windows) para Unix timestamp (ms)
+   */
+  _filetimeToUnix(ftBuffer) {
+    try {
+      const filetime = ftBuffer.readBigUInt64LE(0);
+      if (filetime === BigInt(0)) return Date.now(); // Fallback se não disponível
+      const unixMs = (filetime - FILETIME_EPOCH_DIFF) / BigInt(10000);
+      return Number(unixMs);
+    } catch {
+      return Date.now();
+    }
   }
 
   /**
@@ -38,10 +59,10 @@ class EverythingSearchEngine extends BaseSearchEngine {
 
     try {
       // Tenta carregar ffi-napi dinamicamente
-      let ffi, ref;
+      let ffi;
       try {
         ffi = require('ffi-napi');
-        ref = require('ref-napi');
+        this.ref = require('ref-napi');
       } catch (e) {
         console.error('ffi-napi não encontrado. Execute: npm install ffi-napi ref-napi');
         return false;
@@ -181,6 +202,8 @@ class EverythingSearchEngine extends BaseSearchEngine {
 
     // Coleta todos os resultados
     const items = [];
+    const ftBuffer = Buffer.alloc(8); // Buffer reutilizável para FILETIME (8 bytes)
+
     for (let i = 0; i < numResults; i++) {
       if (this.cancelled) {
         throw new Error('Operação cancelada');
@@ -196,11 +219,17 @@ class EverythingSearchEngine extends BaseSearchEngine {
       const relativePath = path.relative(normalizedRoot, fullPath);
       const depth = relativePath ? relativePath.split(path.sep).length : 0;
 
+      // Extrai data de modificação real do Everything
+      let mtime = Date.now();
+      if (this.dll.Everything_GetResultDateModified(i, ftBuffer)) {
+        mtime = this._filetimeToUnix(ftBuffer);
+      }
+
       items.push({
         name: itemName,
         path: fullPath,
         type: isFolder ? 'directory' : 'file',
-        mtime: Date.now(), // TODO: extrair data real via GetResultDateModified
+        mtime,
         depth,
         parentPath: itemPath
       });

@@ -286,6 +286,50 @@ function filterTree(tree, timePeriod, itemsPerDir) {
   const now = Date.now();
   const cutoffTime = timePeriod > 0 ? now - timePeriod : 0;
 
+  // DEBUG: Log do filtro (envia para main process)
+  const log = (...args) => window.graphfs?.log?.(...args) || console.log(...args);
+
+  const periodLabels = {
+    0: 'Todos',
+    3600000: '1 hora',
+    86400000: '1 dia',
+    604800000: '1 semana',
+    2592000000: '1 mês'
+  };
+
+  // Conta nós na árvore original (antes de filtrar)
+  function countNodes(node) {
+    let files = 0, dirs = 0;
+    if (node.type === 'file') files++;
+    if (node.type === 'directory') dirs++;
+    if (node.children) {
+      for (const child of node.children) {
+        const c = countNodes(child);
+        files += c.files;
+        dirs += c.dirs;
+      }
+    }
+    return { files, dirs };
+  }
+  const originalCount = countNodes(tree);
+
+  log(`\n[FilterTree] ====== Aplicando filtro: ${periodLabels[timePeriod] || timePeriod}ms ======`);
+  log(`[FilterTree] Árvore original: ${originalCount.files} arquivos, ${originalCount.dirs} diretórios`);
+  log(`[FilterTree] Cutoff: ${new Date(cutoffTime).toISOString()}`);
+  log(`[FilterTree] Items por dir: ${itemsPerDir}`);
+
+  // Contadores para debug
+  let stats = {
+    totalFilesChecked: 0,
+    filesPassedTimeFilter: 0,
+    filesAfterLimit: 0,
+    totalDirsChecked: 0,
+    dirsPassedTimeFilter: 0,
+    dirsAfterLimit: 0,
+    sampleFilesRejected: [],
+    sampleFilesAccepted: []
+  };
+
   function cloneAndFilter(node, depth = 0) {
     // Clone o nó
     const filtered = { ...node };
@@ -310,16 +354,41 @@ function filterTree(tree, timePeriod, itemsPerDir) {
     const placeholders = node.children.filter(c => c.type === 'more-dirs' || c.type === 'more-files');
 
     // Filtra dirs por tempo e limita quantidade
-    const validDirs = dirs
-      .filter(d => timePeriod === 0 || hasRecentDescendant(d, cutoffTime))
-      .sort((a, b) => b.mtime - a.mtime)
+    // Ordena pelo mtime mais recente dos DESCENDENTES, não do diretório em si
+    stats.totalDirsChecked += dirs.length;
+    const dirsPassedTime = dirs.filter(d => timePeriod === 0 || hasRecentDescendant(d, cutoffTime));
+    stats.dirsPassedTimeFilter += dirsPassedTime.length;
+    const validDirs = dirsPassedTime
+      .sort((a, b) => getMaxDescendantMtime(b) - getMaxDescendantMtime(a))
       .slice(0, itemsPerDir);
+    stats.dirsAfterLimit += validDirs.length;
 
     // Filtra files por tempo e limita quantidade
-    const validFiles = files
-      .filter(f => timePeriod === 0 || f.mtime >= cutoffTime)
+    stats.totalFilesChecked += files.length;
+    const filesPassedTime = files.filter(f => timePeriod === 0 || f.mtime >= cutoffTime);
+    stats.filesPassedTimeFilter += filesPassedTime.length;
+
+    // DEBUG: Captura amostras de arquivos aceitos/rejeitados
+    if (stats.sampleFilesAccepted.length < 5) {
+      filesPassedTime.slice(0, 3).forEach(f => {
+        if (stats.sampleFilesAccepted.length < 5) {
+          stats.sampleFilesAccepted.push({ name: f.name, mtime: f.mtime, mtimeDate: new Date(f.mtime).toISOString() });
+        }
+      });
+    }
+    const filesRejected = files.filter(f => timePeriod > 0 && f.mtime < cutoffTime);
+    if (stats.sampleFilesRejected.length < 5) {
+      filesRejected.slice(0, 3).forEach(f => {
+        if (stats.sampleFilesRejected.length < 5) {
+          stats.sampleFilesRejected.push({ name: f.name, mtime: f.mtime, mtimeDate: new Date(f.mtime).toISOString() });
+        }
+      });
+    }
+
+    const validFiles = filesPassedTime
       .sort((a, b) => b.mtime - a.mtime)
       .slice(0, itemsPerDir);
+    stats.filesAfterLimit += validFiles.length;
 
     // Processa dirs filtrados
     for (const dir of validDirs) {
@@ -378,7 +447,39 @@ function filterTree(tree, timePeriod, itemsPerDir) {
     return node.children.some(child => hasRecentDescendant(child, cutoffTime));
   }
 
-  return cloneAndFilter(tree);
+  // Retorna o mtime mais recente entre o nó e seus descendentes
+  // Usado para ordenar diretórios pelo conteúdo mais recente, não pelo mtime da pasta
+  const maxMtimeCache = new Map();
+  function getMaxDescendantMtime(node) {
+    if (maxMtimeCache.has(node.path)) {
+      return maxMtimeCache.get(node.path);
+    }
+    let maxMtime = node.mtime || 0;
+    if (node.children) {
+      for (const child of node.children) {
+        const childMax = getMaxDescendantMtime(child);
+        if (childMax > maxMtime) maxMtime = childMax;
+      }
+    }
+    maxMtimeCache.set(node.path, maxMtime);
+    return maxMtime;
+  }
+
+  const result = cloneAndFilter(tree);
+
+  // DEBUG: Estatísticas finais
+  log(`[FilterTree] ------ Estatísticas ------`);
+  log(`[FilterTree] Arquivos: ${stats.totalFilesChecked} verificados → ${stats.filesPassedTimeFilter} passaram tempo → ${stats.filesAfterLimit} após limite`);
+  log(`[FilterTree] Diretórios: ${stats.totalDirsChecked} verificados → ${stats.dirsPassedTimeFilter} passaram tempo → ${stats.dirsAfterLimit} após limite`);
+  if (stats.sampleFilesAccepted.length > 0) {
+    log(`[FilterTree] Exemplos ACEITOS:`, JSON.stringify(stats.sampleFilesAccepted, null, 2));
+  }
+  if (stats.sampleFilesRejected.length > 0) {
+    log(`[FilterTree] Exemplos REJEITADOS:`, JSON.stringify(stats.sampleFilesRejected, null, 2));
+  }
+  log(`[FilterTree] ==============================\n`);
+
+  return result;
 }
 
 /**

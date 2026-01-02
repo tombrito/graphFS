@@ -200,6 +200,11 @@ app.whenReady().then(async () => {
   // Start context menu server early for faster first response
   startContextMenuServer();
 
+  // Handler para debug logs do renderer
+  ipcMain.on('debug:log', (event, ...args) => {
+    console.log('[Renderer]', ...args);
+  });
+
   // Handler para memória total de todos os processos
   ipcMain.handle('system:memory-usage', async () => {
     const metrics = await app.getAppMetrics();
