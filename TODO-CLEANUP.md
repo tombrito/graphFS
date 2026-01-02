@@ -19,7 +19,7 @@
 - **Solução:** Remover a linha
 
 ### 3. Handler `shell:show-context-menu` não usado
-- **Arquivo:** `main.js:429-455`
+- **Arquivo:** `main.js:430-456`
 - **Problema:** Handler IPC nunca chamado (showQuickMenu usa `sendContextMenuCommand` diretamente)
 - **Solução:** Remover o handler (~26 linhas)
 
@@ -41,3 +41,16 @@
 - **TODOs:**
   - Linux: mlocate, plocate
   - macOS: mdfind (Spotlight)
+
+---
+
+## Resolvidos
+
+### mtime fictício no Everything engine
+- **Arquivo:** `search-engines/everything-search-engine.js`
+- **Corrigido:** Agora usa `Everything_GetResultDateModified` (DLL) e `fs.statSync` (CLI)
+
+### Bug do filtro de tempo (mais arquivos em 1W que 1M)
+- **Arquivo:** `renderer/renderer.js` - função `filterTree()`
+- **Problema:** Diretórios eram ordenados pelo mtime do próprio diretório, não pelo conteúdo
+- **Corrigido:** Adicionada função `getMaxDescendantMtime()` que ordena pelo mtime mais recente dos descendentes
