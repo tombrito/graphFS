@@ -122,7 +122,8 @@ const state = {
   time: 0,
   bgAnimEnabled: true,
   lineAnimEnabled: true,
-  activePathEdgeIds: new Set() // IDs das edges no caminho do nó selecionado até a raiz
+  activePathEdgeIds: new Set(), // IDs das edges no caminho do nó selecionado até a raiz
+  collapsedNodes: new Map() // Map de nodeId -> { descendants: [], edges: [] } para nós colapsados
 };
 
 /**
@@ -487,7 +488,8 @@ async function renderGraphFromTree(tree, rootPath) {
         state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
         renderDetails(details, n);
       },
-      expandPlaceholder // Callback para expandir placeholders ao clicar
+      expandPlaceholder,
+      toggleDirectory
     );
     state.nodesContainer.addChild(nodeContainer);
     state.nodeGraphics.set(node.id, nodeContainer);
@@ -751,7 +753,8 @@ function recreateNodes() {
         state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
         renderDetails(details, n);
       },
-      expandPlaceholder // Callback para expandir placeholders ao clicar
+      expandPlaceholder,
+      toggleDirectory
     );
     state.nodesContainer.addChild(nodeContainer);
     state.nodeGraphics.set(node.id, nodeContainer);
@@ -759,8 +762,202 @@ function recreateNodes() {
 }
 
 /**
+ * Toggle expand/collapse de um diretório (comportamento de mind map)
+ * Se expandido: esconde todos os descendentes
+ * Se colapsado: restaura os descendentes
+ */
+function toggleDirectory(dirNode) {
+  if (!dirNode || dirNode.type !== 'directory') return;
+
+  const isCollapsed = state.collapsedNodes.has(dirNode.id);
+
+  if (isCollapsed) {
+    // Expandir: restaurar descendentes
+    expandDirectory(dirNode);
+  } else {
+    // Colapsar: esconder descendentes
+    collapseDirectory(dirNode);
+  }
+}
+
+/**
+ * Colapsa um diretório, escondendo todos os seus descendentes
+ */
+function collapseDirectory(dirNode) {
+  // Encontra todos os descendentes (nós cujo caminho até root passa por dirNode)
+  const descendants = [];
+  const descendantEdges = [];
+
+  function collectDescendants(parentId) {
+    state.nodesData.forEach(node => {
+      if (node.parentId === parentId && node.id !== dirNode.id) {
+        descendants.push(node);
+        // Coleta a edge que conecta ao pai
+        const edge = state.edgeData.find(e => e.target === node.id);
+        if (edge) {
+          descendantEdges.push(edge);
+        }
+        // Recursivamente coleta filhos
+        collectDescendants(node.id);
+      }
+    });
+  }
+
+  collectDescendants(dirNode.id);
+
+  if (descendants.length === 0) return;
+
+  // Guarda os descendentes para restaurar depois
+  state.collapsedNodes.set(dirNode.id, {
+    descendants: descendants.map(n => ({ ...n })),
+    edges: descendantEdges.map(e => ({ ...e, particles: [] }))
+  });
+
+  // Remove os containers visuais dos descendentes
+  descendants.forEach(node => {
+    const container = state.nodeGraphics.get(node.id);
+    if (container) {
+      deepDestroy(container);
+      state.nodeGraphics.delete(node.id);
+    }
+  });
+
+  // Remove partículas das edges
+  descendantEdges.forEach(edge => {
+    if (edge.particles) {
+      edge.particles.forEach(particle => {
+        if (particle.parent) particle.parent.removeChild(particle);
+        particle.destroy();
+      });
+      edge.particles = [];
+    }
+  });
+
+  // Remove dos arrays de dados
+  descendants.forEach(node => {
+    const idx = state.nodesData.findIndex(n => n.id === node.id);
+    if (idx !== -1) state.nodesData.splice(idx, 1);
+  });
+
+  descendantEdges.forEach(edge => {
+    const idx = state.edgeData.findIndex(e => e.target === edge.target);
+    if (idx !== -1) state.edgeData.splice(idx, 1);
+  });
+
+  // Marca o nó como colapsado (para indicador visual)
+  dirNode.isCollapsed = true;
+
+  // Atualiza o container visual do diretório para mostrar indicador de colapsado
+  const container = state.nodeGraphics.get(dirNode.id);
+  if (container && container._label) {
+    container._label.text = '▸ ' + dirNode.name;
+  }
+
+  // Limpa caches
+  resetEdgeGraphicsCache();
+  pathNodesCache = null;
+  pathEdgesCache = null;
+
+  console.log(`[Collapse] Colapsou ${dirNode.name}: ${descendants.length} descendentes escondidos`);
+}
+
+/**
+ * Expande um diretório colapsado, restaurando seus descendentes
+ */
+function expandDirectory(dirNode) {
+  const saved = state.collapsedNodes.get(dirNode.id);
+  if (!saved) return;
+
+  const { descendants, edges } = saved;
+
+  // Restaura os nós nos dados
+  state.nodesData.push(...descendants);
+  state.edgeData.push(...edges);
+
+  // Recalcula mtime range
+  updateMtimeRange(state.nodesData);
+
+  // Cria partículas para as edges
+  const nodesById = new Map(state.nodesData.map(n => [n.id, n]));
+  edges.forEach(edge => {
+    const source = nodesById.get(edge.source);
+    const target = nodesById.get(edge.target);
+    if (source && target) {
+      createEdgeParticles(edge, source, target, state.particlesContainer);
+    }
+  });
+
+  // Cria containers visuais para os nós restaurados
+  descendants.forEach(node => {
+    const nodeContainer = createNode(
+      node,
+      state.nodesData,
+      state.nodeGraphics,
+      () => state.selectedNode,
+      (n) => {
+        state.selectedNode = n;
+        state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
+        renderDetails(details, n);
+      },
+      expandPlaceholder,
+      toggleDirectory
+    );
+    state.nodesContainer.addChild(nodeContainer);
+    state.nodeGraphics.set(node.id, nodeContainer);
+
+    // Anima entrada
+    nodeContainer.alpha = 0;
+    nodeContainer.scale.set(0.5);
+  });
+
+  // Animação de entrada
+  let progress = 0;
+  const animateIn = () => {
+    progress += 0.08;
+    if (progress >= 1) {
+      descendants.forEach(node => {
+        const container = state.nodeGraphics.get(node.id);
+        if (container) {
+          container.alpha = 1;
+          container.scale.set(1);
+        }
+      });
+      return;
+    }
+    const easeProgress = 1 - Math.pow(1 - progress, 3);
+    descendants.forEach(node => {
+      const container = state.nodeGraphics.get(node.id);
+      if (container) {
+        container.alpha = easeProgress;
+        container.scale.set(0.5 + easeProgress * 0.5);
+      }
+    });
+    requestAnimationFrame(animateIn);
+  };
+  requestAnimationFrame(animateIn);
+
+  // Remove do mapa de colapsados
+  state.collapsedNodes.delete(dirNode.id);
+  dirNode.isCollapsed = false;
+
+  // Restaura label do diretório
+  const container = state.nodeGraphics.get(dirNode.id);
+  if (container && container._label) {
+    container._label.text = dirNode.name;
+  }
+
+  // Limpa caches
+  resetEdgeGraphicsCache();
+  pathNodesCache = null;
+  pathEdgesCache = null;
+
+  console.log(`[Expand] Expandiu ${dirNode.name}: ${descendants.length} descendentes restaurados`);
+}
+
+/**
  * Expande um nó placeholder (+x arquivos/pastas) para mostrar os itens ocultos
  * Os novos nós aparecem com estilo muted (menos destaque)
+ * Diretórios são expandidos recursivamente até os arquivos recentes
  */
 function expandPlaceholder(placeholderNode) {
   if (!placeholderNode || !placeholderNode.hiddenItems || placeholderNode.hiddenItems.length === 0) {
@@ -784,40 +981,58 @@ function expandPlaceholder(placeholderNode) {
   const newNodes = [];
   const newEdges = [];
 
-  hiddenItems.forEach((item, index) => {
-    // Distribui os nós em semicírculo a partir do placeholder
-    const angle = (index / Math.max(hiddenItems.length - 1, 1)) * Math.PI - Math.PI / 2;
-    const radius = 80 + (index % 3) * 30; // Espaçamento variado
+  // Função recursiva para processar um item e seus children
+  function processItemRecursively(item, parentNodeId, depth, parentX, parentY, angleOffset, radiusBase) {
+    const angle = angleOffset;
+    const radius = radiusBase;
 
     const newNode = {
       id: item.path,
       path: item.path,
       name: item.name,
       type: item.type,
-      depth: placeholderDepth,
-      parentId: parentId,
+      depth: depth,
+      parentId: parentNodeId,
       mtime: item.mtime,
-      childCount: 0,
+      childCount: item.children ? item.children.length : 0,
       hiddenFilesCount: 0,
       hiddenDirsCount: 0,
       totalFilesCount: 0,
       totalDirsCount: 0,
-      isExpandedItem: true, // Marca como item expandido (estilo muted)
-      x: baseX + Math.cos(angle) * radius,
-      y: baseY + Math.sin(angle) * radius,
+      isExpandedItem: true,
+      x: parentX + Math.cos(angle) * radius,
+      y: parentY + Math.sin(angle) * radius,
       labelAngle: angle
     };
 
     newNodes.push(newNode);
 
-    // Cria edge do pai para o novo nó
     const newEdge = {
-      source: parentId,
+      source: parentNodeId,
       target: newNode.id,
       particles: [],
-      edgeId: `${parentId}-${newNode.id}`
+      edgeId: `${parentNodeId}-${newNode.id}`
     };
     newEdges.push(newEdge);
+
+    // Se é um diretório com children, processa recursivamente
+    if (item.type === 'directory' && item.children && item.children.length > 0) {
+      const childCount = item.children.length;
+      item.children.forEach((child, childIndex) => {
+        // Distribui os filhos em arco a partir do diretório pai
+        const childAngle = angle + ((childIndex / Math.max(childCount - 1, 1)) - 0.5) * (Math.PI / 2);
+        const childRadius = 70 + (childIndex % 2) * 20;
+        processItemRecursively(child, newNode.id, depth + 1, newNode.x, newNode.y, childAngle, childRadius);
+      });
+    }
+  }
+
+  hiddenItems.forEach((item, index) => {
+    // Distribui os nós em semicírculo a partir do placeholder
+    const angle = (index / Math.max(hiddenItems.length - 1, 1)) * Math.PI - Math.PI / 2;
+    const radius = 80 + (index % 3) * 30; // Espaçamento variado
+
+    processItemRecursively(item, parentId, placeholderDepth, baseX, baseY, angle, radius);
   });
 
   // Adiciona aos dados globais
@@ -850,7 +1065,8 @@ function expandPlaceholder(placeholderNode) {
         state.activePathEdgeIds = getPathToRoot(n, state.edgeData, state.nodesData);
         renderDetails(details, n);
       },
-      expandPlaceholder // Callback para expansão recursiva
+      expandPlaceholder,
+      toggleDirectory
     );
     state.nodesContainer.addChild(nodeContainer);
     state.nodeGraphics.set(node.id, nodeContainer);
@@ -925,6 +1141,178 @@ function expandPlaceholder(placeholderNode) {
   resetEdgeGraphicsCache();
 
   console.log(`[Expand] Expandiu ${newNodes.length} itens de ${placeholderNode.name}`);
+
+  // Recalcula o layout para evitar sobreposições
+  relayoutAfterExpansion();
+}
+
+/**
+ * Recalcula o layout do grafo após uma expansão para evitar sobreposições.
+ * Usa simulação de forças e anima os nós para as novas posições.
+ */
+function relayoutAfterExpansion() {
+  const nodes = state.nodesData;
+  const edges = state.edgeData;
+
+  if (nodes.length === 0) return;
+
+  // Encontra o nó raiz (depth 0)
+  const root = nodes.find(n => n.depth === 0);
+  if (!root) return;
+
+  // Configuração de forças
+  const REPULSION = 4000;
+  const LINK_STRENGTH = 0.12;
+  const LINK_DISTANCE = 100;
+  const COLLISION_RADIUS = 55;
+  const DAMPING = 0.8;
+  const ITERATIONS = 100;
+
+  // Mapa para lookup rápido
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+  // Inicializa velocidades
+  nodes.forEach(n => {
+    n.vx = 0;
+    n.vy = 0;
+    n.fixed = n.depth === 0; // Mantém root fixo
+  });
+
+  // Simulação de forças
+  for (let iter = 0; iter < ITERATIONS; iter++) {
+    const alpha = 1 - iter / ITERATIONS;
+
+    // Repulsão entre todos os pares
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i];
+        const b = nodes[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        const force = (REPULSION * alpha) / (dist * dist);
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+
+        if (!a.fixed) { a.vx -= fx; a.vy -= fy; }
+        if (!b.fixed) { b.vx += fx; b.vy += fy; }
+      }
+    }
+
+    // Força dos links
+    edges.forEach(edge => {
+      const source = nodeMap.get(edge.source);
+      const target = nodeMap.get(edge.target);
+      if (!source || !target) return;
+
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+      const idealDist = LINK_DISTANCE + (target.depth || 1) * 15;
+      const diff = dist - idealDist;
+      const force = diff * LINK_STRENGTH * alpha;
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+
+      if (!source.fixed) { source.vx += fx; source.vy += fy; }
+      if (!target.fixed) { target.vx -= fx; target.vy -= fy; }
+    });
+
+    // Colisão
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i];
+        const b = nodes[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const minDist = COLLISION_RADIUS * 2;
+
+        if (dist < minDist) {
+          const overlap = (minDist - dist) / 2;
+          const fx = (dx / dist) * overlap * 0.5;
+          const fy = (dy / dist) * overlap * 0.5;
+
+          if (!a.fixed) { a.x -= fx; a.y -= fy; }
+          if (!b.fixed) { b.x += fx; b.y += fy; }
+        }
+      }
+    }
+
+    // Aplicar velocidades
+    nodes.forEach(n => {
+      if (n.fixed) return;
+      n.x += n.vx;
+      n.y += n.vy;
+      n.vx *= DAMPING;
+      n.vy *= DAMPING;
+    });
+  }
+
+  // Limpar propriedades temporárias e atualizar ângulos
+  nodes.forEach(n => {
+    if (n.depth !== 0) {
+      n.labelAngle = Math.atan2(n.y, n.x);
+    }
+    delete n.vx;
+    delete n.vy;
+    delete n.fixed;
+  });
+
+  // Anima os containers visuais para as novas posições
+  animateNodesToNewPositions();
+}
+
+/**
+ * Anima suavemente todos os nós para suas novas posições calculadas.
+ */
+function animateNodesToNewPositions() {
+  const nodes = state.nodesData;
+  const duration = 500; // ms
+  const startTime = performance.now();
+
+  // Salva posições iniciais dos containers
+  const startPositions = new Map();
+  nodes.forEach(node => {
+    const container = state.nodeGraphics.get(node.id);
+    if (container) {
+      startPositions.set(node.id, { x: container.x, y: container.y });
+    }
+  });
+
+  function animate(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+
+    nodes.forEach(node => {
+      const container = state.nodeGraphics.get(node.id);
+      const startPos = startPositions.get(node.id);
+      if (container && startPos) {
+        container.x = startPos.x + (node.x - startPos.x) * easeProgress;
+        container.y = startPos.y + (node.y - startPos.y) * easeProgress;
+      }
+    });
+
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      // Posição final exata
+      nodes.forEach(node => {
+        const container = state.nodeGraphics.get(node.id);
+        if (container) {
+          container.x = node.x;
+          container.y = node.y;
+        }
+      });
+      // Reseta cache de edges para redesenhar com novas posições
+      resetEdgeGraphicsCache();
+    }
+  }
+
+  requestAnimationFrame(animate);
 }
 
 bootstrap();

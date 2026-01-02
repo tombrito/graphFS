@@ -126,7 +126,7 @@ function truncateName(name, maxLength) {
   return name.substring(0, maxLength - 1) + '…';
 }
 
-export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDetails, onExpandPlaceholder = null) {
+export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDetails, onExpandPlaceholder = null, onToggleDirectory = null) {
   const container = new PIXI.Container();
   container.x = node.x;
   container.y = node.y;
@@ -355,10 +355,16 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
       prevContainer._ring.alpha = 0.6;
     }
 
+    // Seleciona o nó e anima o caminho
     renderDetails(node);
     container.scale.set(1.1);
     container._outerGlow.visible = true;
     container._ring.alpha = 1;
+
+    // Se é um diretório (não root), faz toggle de expand/collapse
+    if (isDirectory && !isRoot && onToggleDirectory) {
+      onToggleDirectory(node);
+    }
   });
 
   // Right-click context menu (hybrid quick menu)
