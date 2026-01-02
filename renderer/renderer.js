@@ -527,18 +527,18 @@ function setupScanButtons() {
     if (e.target === scanModal) hideModal();
   });
 
-  // Botão: Escanear pasta do usuário
-  btnScanUser.addEventListener('click', async () => {
+  // Helper para executar scan com UI feedback
+  async function performScan(scanFn, label, btn, btnResetText) {
     if (isScanning) return;
 
-    setScanning(true, 'Escaneando pasta do usuário...');
+    setScanning(true, `Escaneando ${label}...`);
     fallbackBadge.hidden = true;
-    btnScanUser.textContent = 'Escaneando...';
+    btn.textContent = 'Escaneando...';
 
     try {
       const topFiles = getTopFiles();
-      console.log('[Scan] Iniciando scan da pasta do usuário... (topFiles:', topFiles, ')');
-      const result = await window.graphfs.searchEngines.scanUser({ topFiles });
+      console.log(`[Scan] Iniciando scan de ${label}... (topFiles:`, topFiles, ')');
+      const result = await scanFn(topFiles);
       console.log('[Scan] Resultado:', result);
 
       if (result.success) {
@@ -560,46 +560,25 @@ function setupScanButtons() {
       console.error('[Scan] Exceção:', error);
     } finally {
       setScanning(false, '');
-      btnScanUser.textContent = 'Escanear Pasta do Usuário';
+      btn.textContent = btnResetText;
     }
-  });
+  }
+
+  // Botão: Escanear pasta do usuário
+  btnScanUser.addEventListener('click', () => performScan(
+    (topFiles) => window.graphfs.searchEngines.scanUser({ topFiles }),
+    'pasta do usuário',
+    btnScanUser,
+    'Escanear Pasta do Usuário'
+  ));
 
   // Botão: Escanear C:
-  btnScanDrive.addEventListener('click', async () => {
-    if (isScanning) return;
-
-    setScanning(true, 'Escaneando C:...');
-    fallbackBadge.hidden = true;
-    btnScanDrive.textContent = 'Escaneando...';
-
-    try {
-      const topFiles = getTopFiles();
-      console.log('[Scan] Iniciando scan de C:... (topFiles:', topFiles, ')');
-      const result = await window.graphfs.searchEngines.scanDrive('C:', { topFiles });
-      console.log('[Scan] Resultado:', result);
-
-      if (result.success) {
-        await renderGraphFromScan(result);
-        const totalFiles = result.stats?.totalFiles || 0;
-        showModal(
-          'Scan Concluído',
-          `<p class="stat-label">Arquivos encontrados</p>
-           <p class="stat">${totalFiles}</p>
-           <p class="path">${result.rootPath}</p>`,
-          false
-        );
-      } else {
-        showModal('Erro no Scan', `<p>${result.error || 'Erro desconhecido'}</p>`, true);
-        console.error('[Scan] Erro:', result.error);
-      }
-    } catch (error) {
-      showModal('Erro no Scan', `<p>${error.message}</p>`, true);
-      console.error('[Scan] Exceção:', error);
-    } finally {
-      setScanning(false, '');
-      btnScanDrive.textContent = 'Escanear C:';
-    }
-  });
+  btnScanDrive.addEventListener('click', () => performScan(
+    (topFiles) => window.graphfs.searchEngines.scanDrive('C:', { topFiles }),
+    'C:',
+    btnScanDrive,
+    'Escanear C:'
+  ));
 }
 
 /**
