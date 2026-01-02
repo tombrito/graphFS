@@ -4,9 +4,6 @@ contextBridge.exposeInMainWorld('graphfs', {
   // API de sistema
   getMemoryUsage: () => ipcRenderer.invoke('system:memory-usage'),
 
-  // API original (legado)
-  getFilesystemTree: () => ipcRenderer.invoke('fs-tree'),
-
   // APIs de persistência
   scan: {
     // Carrega o último scan salvo
