@@ -39,23 +39,46 @@ export function toggleDirectory(dirNode) {
  * Colapsa um diretório, escondendo todos os seus descendentes
  */
 export function collapseDirectory(dirNode) {
+
   // Encontra todos os descendentes (nós cujo caminho até root passa por dirNode)
   const descendants = [];
   const descendantEdges = [];
 
+  // Cache para lookup O(1) - constrói mapa de parentId -> filhos
+  const childrenByParent = new Map();
+  state.nodesData.forEach(node => {
+    if (node.parentId) {
+      if (!childrenByParent.has(node.parentId)) {
+        childrenByParent.set(node.parentId, []);
+      }
+      childrenByParent.get(node.parentId).push(node);
+    }
+  });
+
+  // Cache de edges por target
+  const edgeByTarget = new Map();
+  state.edgeData.forEach(e => edgeByTarget.set(e.target, e));
+
+  // Set para evitar processar o mesmo nó duas vezes (proteção contra loops)
+  const visited = new Set();
+
   function collectDescendants(parentId) {
-    state.nodesData.forEach(node => {
-      if (node.parentId === parentId && node.id !== dirNode.id) {
+    const children = childrenByParent.get(parentId);
+    if (!children) return;
+
+    for (const node of children) {
+      if (node.id !== dirNode.id && !visited.has(node.id)) {
+        visited.add(node.id);
         descendants.push(node);
-        // Coleta a edge que conecta ao pai
-        const edge = state.edgeData.find(e => e.target === node.id);
+        // Coleta a edge que conecta ao pai (usando cache)
+        const edge = edgeByTarget.get(node.id);
         if (edge) {
           descendantEdges.push(edge);
         }
         // Recursivamente coleta filhos
         collectDescendants(node.id);
       }
-    });
+    }
   }
 
   collectDescendants(dirNode.id);
@@ -88,16 +111,12 @@ export function collapseDirectory(dirNode) {
     }
   });
 
-  // Remove dos arrays de dados
-  descendants.forEach(node => {
-    const idx = state.nodesData.findIndex(n => n.id === node.id);
-    if (idx !== -1) state.nodesData.splice(idx, 1);
-  });
+  // Remove dos arrays de dados - usa Set para O(n) em vez de O(n²)
+  const descendantIds = new Set(descendants.map(n => n.id));
+  const edgeTargets = new Set(descendantEdges.map(e => e.target));
 
-  descendantEdges.forEach(edge => {
-    const idx = state.edgeData.findIndex(e => e.target === edge.target);
-    if (idx !== -1) state.edgeData.splice(idx, 1);
-  });
+  state.nodesData = state.nodesData.filter(n => !descendantIds.has(n.id));
+  state.edgeData = state.edgeData.filter(e => !edgeTargets.has(e.target));
 
   // Marca o nó como colapsado (para indicador visual)
   dirNode.isCollapsed = true;
@@ -111,8 +130,6 @@ export function collapseDirectory(dirNode) {
   // Limpa caches
   resetEdgeGraphicsCache();
   resetPathCaches();
-
-  console.log(`[Collapse] Colapsou ${dirNode.name}: ${descendants.length} descendentes escondidos`);
 }
 
 /**
@@ -143,6 +160,9 @@ export function expandDirectory(dirNode) {
 
   // Cria containers visuais para os nós restaurados
   descendants.forEach(node => {
+    // Verifica se já existe (evita duplicatas)
+    if (state.nodeGraphics.has(node.id)) return;
+
     const nodeContainer = createNode(
       node,
       state.nodesData,
@@ -205,8 +225,6 @@ export function expandDirectory(dirNode) {
   // Limpa caches
   resetEdgeGraphicsCache();
   resetPathCaches();
-
-  console.log(`[Expand] Expandiu ${dirNode.name}: ${descendants.length} descendentes restaurados`);
 }
 
 /**
@@ -216,7 +234,6 @@ export function expandDirectory(dirNode) {
  */
 export function expandPlaceholder(placeholderNode) {
   if (!placeholderNode || !placeholderNode.hiddenItems || placeholderNode.hiddenItems.length === 0) {
-    console.log('[Expand] Nenhum item oculto para expandir');
     return;
   }
 
@@ -237,9 +254,12 @@ export function expandPlaceholder(placeholderNode) {
   const newEdges = [];
 
   // Função recursiva para processar um item e seus children
-  function processItemRecursively(item, parentNodeId, depth, parentX, parentY, angleOffset, radiusBase) {
+  function processItemRecursively(item, parentNodeId, depth, parentX, parentY, angleOffset, radiusBase, recursionDepth = 0) {
     const angle = angleOffset;
     const radius = radiusBase;
+
+    const calculatedX = parentX + Math.cos(angle) * radius;
+    const calculatedY = parentY + Math.sin(angle) * radius;
 
     const newNode = {
       id: item.path,
@@ -255,8 +275,8 @@ export function expandPlaceholder(placeholderNode) {
       totalFilesCount: 0,
       totalDirsCount: 0,
       isExpandedItem: true,
-      x: parentX + Math.cos(angle) * radius,
-      y: parentY + Math.sin(angle) * radius,
+      x: calculatedX,
+      y: calculatedY,
       labelAngle: angle
     };
 
@@ -277,7 +297,7 @@ export function expandPlaceholder(placeholderNode) {
         // Distribui os filhos em arco a partir do diretório pai
         const childAngle = angle + ((childIndex / Math.max(childCount - 1, 1)) - 0.5) * (Math.PI / 2);
         const childRadius = 70 + (childIndex % 2) * 20;
-        processItemRecursively(child, newNode.id, depth + 1, newNode.x, newNode.y, childAngle, childRadius);
+        processItemRecursively(child, newNode.id, depth + 1, newNode.x, newNode.y, childAngle, childRadius, recursionDepth + 1);
       });
     }
   }
@@ -394,8 +414,6 @@ export function expandPlaceholder(placeholderNode) {
   // Reseta cache de gráficos de edges para redesenhar com as novas edges
   resetEdgeGraphicsCache();
 
-  console.log(`[Expand] Expandiu ${newNodes.length} itens de ${placeholderNode.name}`);
-
   // Recalcula o layout para evitar sobreposições
   relayoutAfterExpansion();
 }
@@ -421,6 +439,9 @@ export function relayoutAfterExpansion() {
   const COLLISION_RADIUS = 55;
   const DAMPING = 0.8;
   const ITERATIONS = 100;
+  const MIN_DIST = 10; // Distância mínima para evitar explosão de força
+  const MAX_FORCE = 50; // Força máxima por iteração
+  const MAX_VELOCITY = 100; // Velocidade máxima por iteração
 
   // Mapa para lookup rápido
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
@@ -443,9 +464,10 @@ export function relayoutAfterExpansion() {
         const b = nodes[j];
         const dx = b.x - a.x;
         const dy = b.y - a.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), MIN_DIST);
 
-        const force = (REPULSION * alpha) / (dist * dist);
+        let force = (REPULSION * alpha) / (dist * dist);
+        force = Math.min(force, MAX_FORCE); // Limita força máxima
         const fx = (dx / dist) * force;
         const fy = (dy / dist) * force;
 
@@ -462,11 +484,12 @@ export function relayoutAfterExpansion() {
 
       const dx = target.x - source.x;
       const dy = target.y - source.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const dist = Math.max(Math.sqrt(dx * dx + dy * dy), MIN_DIST);
 
       const idealDist = LINK_DISTANCE + (target.depth || 1) * 15;
       const diff = dist - idealDist;
-      const force = diff * LINK_STRENGTH * alpha;
+      let force = diff * LINK_STRENGTH * alpha;
+      force = Math.max(-MAX_FORCE, Math.min(force, MAX_FORCE)); // Limita força
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
 
@@ -481,11 +504,11 @@ export function relayoutAfterExpansion() {
         const b = nodes[j];
         const dx = b.x - a.x;
         const dy = b.y - a.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const minDist = COLLISION_RADIUS * 2;
+        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+        const minCollisionDist = COLLISION_RADIUS * 2;
 
-        if (dist < minDist) {
-          const overlap = (minDist - dist) / 2;
+        if (dist < minCollisionDist) {
+          const overlap = Math.min((minCollisionDist - dist) / 2, MAX_FORCE);
           const fx = (dx / dist) * overlap * 0.5;
           const fy = (dy / dist) * overlap * 0.5;
 
@@ -495,9 +518,12 @@ export function relayoutAfterExpansion() {
       }
     }
 
-    // Aplicar velocidades
+    // Aplicar velocidades (com limite)
     nodes.forEach(n => {
       if (n.fixed) return;
+      // Limita velocidade máxima
+      n.vx = Math.max(-MAX_VELOCITY, Math.min(n.vx, MAX_VELOCITY));
+      n.vy = Math.max(-MAX_VELOCITY, Math.min(n.vy, MAX_VELOCITY));
       n.x += n.vx;
       n.y += n.vy;
       n.vx *= DAMPING;
@@ -519,10 +545,17 @@ export function relayoutAfterExpansion() {
   animateNodesToNewPositions();
 }
 
+// Flag para evitar animações sobrepostas
+let animationInProgress = false;
+
 /**
  * Anima suavemente todos os nós para suas novas posições calculadas.
  */
 function animateNodesToNewPositions() {
+  // Evita animações sobrepostas que podem causar problemas
+  if (animationInProgress) return;
+  animationInProgress = true;
+
   const nodes = state.nodesData;
   const duration = 500; // ms
   const startTime = performance.now();
@@ -537,32 +570,38 @@ function animateNodesToNewPositions() {
   });
 
   function animate(currentTime) {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+    try {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
 
-    nodes.forEach(node => {
-      const container = state.nodeGraphics.get(node.id);
-      const startPos = startPositions.get(node.id);
-      if (container && startPos) {
-        container.x = startPos.x + (node.x - startPos.x) * easeProgress;
-        container.y = startPos.y + (node.y - startPos.y) * easeProgress;
-      }
-    });
-
-    if (progress < 1) {
-      requestAnimationFrame(animate);
-    } else {
-      // Posição final exata
       nodes.forEach(node => {
         const container = state.nodeGraphics.get(node.id);
-        if (container) {
-          container.x = node.x;
-          container.y = node.y;
+        const startPos = startPositions.get(node.id);
+        if (container && startPos) {
+          container.x = startPos.x + (node.x - startPos.x) * easeProgress;
+          container.y = startPos.y + (node.y - startPos.y) * easeProgress;
         }
       });
-      // Reseta cache de edges para redesenhar com novas posições
-      resetEdgeGraphicsCache();
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // Posição final exata
+        nodes.forEach(node => {
+          const container = state.nodeGraphics.get(node.id);
+          if (container) {
+            container.x = node.x;
+            container.y = node.y;
+          }
+        });
+        // Reseta cache de edges para redesenhar com novas posições
+        resetEdgeGraphicsCache();
+
+        animationInProgress = false; // Libera para próxima animação
+      }
+    } catch (error) {
+      animationInProgress = false; // Libera mesmo em caso de erro
     }
   }
 

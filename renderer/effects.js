@@ -145,6 +145,12 @@ function getNodeById(nodesData, id) {
   return nodeIdCache.get(id);
 }
 
+// Flag para ativar logs detalhados de edges (definido ao expandir placeholder)
+let edgeDebugMode = false;
+export function setEdgeDebugMode(enabled) {
+  edgeDebugMode = enabled;
+}
+
 export function drawEdges(edgesContainer, edgeData, nodesData, activePathEdgeIds = null) {
   // Criar o Graphics apenas uma vez e reutilizar
   if (!cachedEdgeGraphics) {
@@ -160,9 +166,28 @@ export function drawEdges(edgesContainer, edgeData, nodesData, activePathEdgeIds
   const activeEdges = [];
   const glowEdges = [];
 
+  let missingSourceCount = 0;
+  let missingTargetCount = 0;
+  let invalidCoordsCount = 0;
+
   edgeData.forEach((edge) => {
     const source = getNodeById(nodesData, edge.source);
     const target = getNodeById(nodesData, edge.target);
+
+    if (!source) { missingSourceCount++; return; }
+    if (!target) { missingTargetCount++; return; }
+    if (isNaN(source.x) || isNaN(source.y) || isNaN(target.x) || isNaN(target.y)) {
+      invalidCoordsCount++;
+      if (edgeDebugMode) {
+        console.warn('[DrawEdges] Edge com coordenadas inválidas:', {
+          sourceId: edge.source,
+          targetId: edge.target,
+          sourceCoords: `${source.x}, ${source.y}`,
+          targetCoords: `${target.x}, ${target.y}`
+        });
+      }
+      return;
+    }
 
     if (source && target) {
       const recency = edge.recency || 0.5;
@@ -262,6 +287,7 @@ export function drawEdges(edgesContainer, edgeData, nodesData, activePathEdgeIds
     });
     cachedEdgeGraphics.stroke();
   }
+
 }
 
 // Resetar cache quando trocar de scan
@@ -294,16 +320,22 @@ export function animateEntrance(nodes, nodeGraphics) {
 }
 
 export function animateTo(target, props, duration) {
+  // Verifica se target é válido
+  if (!target || target.destroyed) return;
+
   const startTime = Date.now();
   const startValues = {};
 
   for (const key in props) {
-    if (key === 'scaleX') startValues[key] = target.scale.x;
-    else if (key === 'scaleY') startValues[key] = target.scale.y;
-    else startValues[key] = target[key];
+    if (key === 'scaleX') startValues[key] = target.scale?.x ?? 1;
+    else if (key === 'scaleY') startValues[key] = target.scale?.y ?? 1;
+    else startValues[key] = target[key] ?? 0;
   }
 
   function update() {
+    // Para a animação se o target foi destruído
+    if (!target || target.destroyed || !target.scale) return;
+
     const elapsed = Date.now() - startTime;
     const progress = Math.min(elapsed / duration, 1);
     const eased = 1 - Math.pow(1 - progress, 3);

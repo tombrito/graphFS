@@ -86,11 +86,39 @@ export function filterTree(tree, timePeriod, itemsPerDir) {
     const totalDirsInOriginal = dirs.length + (placeholders.find(p => p.type === 'more-dirs')?.hiddenDirsCount || 0);
     const totalFilesInOriginal = files.length + (placeholders.find(p => p.type === 'more-files')?.hiddenFilesCount || 0);
 
+    // Função para filtrar children recursivamente pelo tempo E aplicar limite de itens
+    function filterChildrenByTime(item) {
+      if (!item.children || item.children.length === 0) {
+        return { ...item };
+      }
+
+      // Separa dirs e files
+      const dirs = item.children.filter(c => c.type === 'directory');
+      const files = item.children.filter(c => c.type === 'file');
+
+      // Filtra dirs por tempo e ordena por mtime descendente, limita a itemsPerDir
+      const filteredDirs = dirs
+        .filter(d => timePeriod === 0 || hasRecentDescendant(d, cutoffTime))
+        .sort((a, b) => getMaxDescendantMtime(b) - getMaxDescendantMtime(a))
+        .slice(0, itemsPerDir)
+        .map(d => filterChildrenByTime(d)); // Aplica recursivamente
+
+      // Filtra files por tempo e ordena por mtime descendente, limita a itemsPerDir
+      const filteredFiles = files
+        .filter(f => timePeriod === 0 || f.mtime >= cutoffTime)
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, itemsPerDir)
+        .map(f => ({ ...f }));
+
+      return { ...item, children: [...filteredDirs, ...filteredFiles] };
+    }
+
     // Coleta os dados dos itens ocultos (que passaram no filtro de tempo mas não estão no top N)
+    // IMPORTANTE: Aplica filtro de tempo aos children também!
     const hiddenDirItems = dirsPassedTime
       .sort((a, b) => getMaxDescendantMtime(b) - getMaxDescendantMtime(a))
       .slice(itemsPerDir)
-      .map(d => ({ ...d, children: d.children || [] }));
+      .map(d => filterChildrenByTime(d));
 
     const hiddenFileItems = filesPassedTime
       .sort((a, b) => b.mtime - a.mtime)

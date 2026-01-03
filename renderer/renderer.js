@@ -156,7 +156,6 @@ async function applyFiltersAndRender() {
     filterConfig.timePeriod,
     filterConfig.itemsPerDir
   );
-
   await renderGraphFromTree(filteredTree, state.originalRootPath);
 }
 
@@ -171,6 +170,7 @@ async function renderGraphFromTree(tree, rootPath) {
   state.nodeGraphics.clear();
   state.selectedNode = null;
   state.activePathEdgeIds = new Set();
+  state.collapsedNodes.clear(); // Limpa nós colapsados - ficam inválidos após mudança de filtro
   resetEdgeGraphicsCache();
   resetPathCaches();
 
