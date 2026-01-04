@@ -1,11 +1,6 @@
 import * as PIXI from '../node_modules/pixi.js/dist/pixi.mjs';
 import { COLORS } from './colors.js';
-
-// Configuração de limite de caracteres nos labels (valores padrão dobrados)
-export const labelConfig = {
-  maxCharsRoot: 40,    // antes: 20
-  maxCharsNode: 30     // antes: 15
-};
+import { config, getDisplayName } from './config.js';
 
 export function createFolderIcon(color, isRoot) {
   const icon = new PIXI.Graphics();
@@ -102,28 +97,59 @@ export function createBadge(count) {
   return badge;
 }
 
-function truncateName(name, maxLength) {
-  if (name.length <= maxLength) return name;
+// truncateName movido para config.js como função compartilhada
 
-  // Verificar se tem extensão (arquivo)
-  const lastDotIndex = name.lastIndexOf('.');
+/**
+ * Atualiza a posição do label dentro do container baseado no novo labelAngle.
+ * Deve ser chamado sempre que node.labelAngle mudar (ex: após relayout).
+ */
+export function updateLabelPosition(container, node) {
+  const labelContainer = container._label;
+  if (!labelContainer) return;
 
-  // Se tem extensão e não é um arquivo oculto (que começa com .)
-  if (lastDotIndex > 0) {
-    const extension = name.substring(lastDotIndex); // inclui o ponto
-    const baseName = name.substring(0, lastDotIndex);
+  const isRoot = node.depth === 0;
+  const isMoreNode = node.type === 'more-dirs' || node.type === 'more-files';
+  const isDirectory = node.type === 'directory';
 
-    // Calcular espaço disponível para o nome base
-    // maxLength - extensão.length - 1 (para o …)
-    const availableForBase = maxLength - extension.length - 1;
+  const baseRadius = isRoot ? config.nodeSize.ROOT :
+                     (isDirectory ? config.nodeSize.DIRECTORY :
+                     (isMoreNode ? config.nodeSize.MORE : config.nodeSize.FILE));
 
-    if (availableForBase > 0) {
-      return baseName.substring(0, availableForBase) + '…' + extension;
+  const labelDistance = baseRadius + config.label.DISTANCE;
+  const padding = config.label.PADDING;
+
+  // Pega as dimensões do texto atual
+  const labelText = labelContainer.children[1]; // O texto é o segundo filho (após o bg)
+  if (!labelText) return;
+
+  let anchorX = 0.5, anchorY = 0.5;
+
+  if (isRoot) {
+    anchorX = 0.5;
+    anchorY = 0;
+    labelContainer.x = 0;
+    labelContainer.y = labelDistance;
+  } else {
+    const labelAngle = node.labelAngle !== undefined ? node.labelAngle : Math.PI / 2;
+    const normalizedAngle = ((labelAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+
+    labelContainer.x = Math.cos(labelAngle) * labelDistance;
+    labelContainer.y = Math.sin(labelAngle) * labelDistance;
+
+    if (normalizedAngle < Math.PI / 4 || normalizedAngle > Math.PI * 7 / 4) {
+      anchorX = 0; anchorY = 0.5;
+    } else if (normalizedAngle < Math.PI * 3 / 4) {
+      anchorX = 0.5; anchorY = 0;
+    } else if (normalizedAngle < Math.PI * 5 / 4) {
+      anchorX = 1; anchorY = 0.5;
+    } else {
+      anchorX = 0.5; anchorY = 1;
     }
   }
 
-  // Fallback: comportamento original (para diretórios ou nomes sem extensão)
-  return name.substring(0, maxLength - 1) + '…';
+  // Atualiza o pivot
+  labelContainer.pivot.x = (labelText.width + padding.x * 2) * anchorX - padding.x;
+  labelContainer.pivot.y = (labelText.height + padding.y * 2) * anchorY - padding.y;
 }
 
 export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDetails, onExpandPlaceholder = null, onToggleDirectory = null) {
@@ -139,7 +165,9 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   const isMoreNode = isMoreDirs || isMoreFiles;
   const isExpandedItem = node.isExpandedItem === true; // Nó que veio de expansão (estilo muted)
 
-  const baseRadius = isRoot ? 35 : (isDirectory ? 22 : (isMoreNode ? 18 : 14));
+  const baseRadius = isRoot ? config.nodeSize.ROOT :
+                     (isDirectory ? config.nodeSize.DIRECTORY :
+                     (isMoreNode ? config.nodeSize.MORE : config.nodeSize.FILE));
   const color = isRoot ? COLORS.rootNode :
                 (isDirectory ? COLORS.directory :
                 (isMoreDirs ? COLORS.moreDirs :
@@ -226,7 +254,7 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
 
   const isMutedStyle = isMoreNode || isExpandedItem;
   const label = new PIXI.Text({
-    text: isMoreNode ? node.name : truncateName(node.name, isRoot ? labelConfig.maxCharsRoot : labelConfig.maxCharsNode),
+    text: getDisplayName(node),  // Usa função compartilhada para truncamento consistente
     style: {
       fontFamily: 'Segoe UI, Arial, sans-serif',
       fontSize: isRoot ? 14 : (isMutedStyle ? 10 : 11),
@@ -238,7 +266,7 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   });
 
   // Fundo escuro para legibilidade
-  const padding = { x: 4, y: 2 };
+  const padding = config.label.PADDING;  // Usa config para consistência com colisão
   const labelBg = new PIXI.Graphics();
   labelBg.beginFill(0x0a0a12, 0.85);
   labelBg.drawRoundedRect(
@@ -254,7 +282,7 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   labelContainer.addChild(label);
 
   // Posicionar label baseado no ângulo do nó (aponta para fora do grafo)
-  const labelDistance = baseRadius + 12;
+  const labelDistance = baseRadius + config.label.DISTANCE;
   let anchorX = 0.5, anchorY = 0.5;
 
   if (isRoot) {

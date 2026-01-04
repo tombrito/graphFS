@@ -2,7 +2,8 @@
 
 import { COLORS, updateMtimeRange } from './colors.js';
 import { flattenTree, layoutNodesForce } from './graph-layout.js';
-import { createNode, labelConfig } from './nodes.js';
+import { createNode } from './nodes.js';
+import { config } from './config.js';
 import { createStarfield, createNebula, createEdgeParticles, animateEntrance, createAnimationLoop, resetEdgeGraphicsCache, animateOpenFeedback } from './effects.js';
 import { createPixiApp, centerGraphInView, applyZoom, setupZoomControls, setupPanControls } from './pixi-app.js';
 import { renderNotice, renderDetails, renderTree, setupAnimationControls } from './ui.js';
@@ -399,17 +400,17 @@ function setupLabelCharsControl() {
 
   if (!slider || !valueDisplay) return;
 
-  // Inicializa com o valor do labelConfig
-  slider.value = labelConfig.maxCharsNode;
-  valueDisplay.textContent = labelConfig.maxCharsNode;
+  // Inicializa com o valor da config
+  slider.value = config.label.MAX_CHARS_NODE;
+  valueDisplay.textContent = config.label.MAX_CHARS_NODE;
 
   slider.addEventListener('input', (e) => {
     const value = parseInt(e.target.value, 10);
     valueDisplay.textContent = value;
 
     // Atualiza a configuração (root fica 33% maior que nodes)
-    labelConfig.maxCharsNode = value;
-    labelConfig.maxCharsRoot = Math.round(value * 1.33);
+    config.label.MAX_CHARS_NODE = value;
+    config.label.MAX_CHARS_ROOT = Math.round(value * 1.33);
 
     // Recria os nós em tempo real
     recreateNodes();

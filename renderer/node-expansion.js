@@ -1,10 +1,18 @@
 // Funções de expansão/colapso de nós do grafo
 
+import * as PIXI from '../node_modules/pixi.js/dist/pixi.mjs';
 import { state, resetPathCaches, getPathToRoot } from './state.js';
 import { deepDestroy } from './memory.js';
 import { updateMtimeRange } from './colors.js';
-import { createNode } from './nodes.js';
+import { createNode, updateLabelPosition } from './nodes.js';
 import { createEdgeParticles, resetEdgeGraphicsCache } from './effects.js';
+import { relayoutHierarchical, calculateTextCenter } from './graph-layout.js';
+import { config, getDisplayName } from './config.js';
+
+// Expõe PIXI para debug no console
+if (typeof window !== 'undefined') {
+  window.PIXI = PIXI;
+}
 
 // Referência para o elemento details (será definido externamente)
 let detailsElement = null;
@@ -420,7 +428,7 @@ export function expandPlaceholder(placeholderNode) {
 
 /**
  * Recalcula o layout do grafo após uma expansão para evitar sobreposições.
- * Usa simulação de forças e anima os nós para as novas posições.
+ * Usa layout hierárquico em setores e anima os nós para as novas posições.
  */
 export function relayoutAfterExpansion() {
   const nodes = state.nodesData;
@@ -428,121 +436,89 @@ export function relayoutAfterExpansion() {
 
   if (nodes.length === 0) return;
 
-  // Encontra o nó raiz (depth 0)
-  const root = nodes.find(n => n.depth === 0);
-  if (!root) return;
-
-  // Configuração de forças
-  const REPULSION = 4000;
-  const LINK_STRENGTH = 0.12;
-  const LINK_DISTANCE = 100;
-  const COLLISION_RADIUS = 55;
-  const DAMPING = 0.8;
-  const ITERATIONS = 100;
-  const MIN_DIST = 10; // Distância mínima para evitar explosão de força
-  const MAX_FORCE = 50; // Força máxima por iteração
-  const MAX_VELOCITY = 100; // Velocidade máxima por iteração
-
-  // Mapa para lookup rápido
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
-
-  // Inicializa velocidades
-  nodes.forEach(n => {
-    n.vx = 0;
-    n.vy = 0;
-    n.fixed = n.depth === 0; // Mantém root fixo
-  });
-
-  // Simulação de forças
-  for (let iter = 0; iter < ITERATIONS; iter++) {
-    const alpha = 1 - iter / ITERATIONS;
-
-    // Repulsão entre todos os pares
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i];
-        const b = nodes[j];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), MIN_DIST);
-
-        let force = (REPULSION * alpha) / (dist * dist);
-        force = Math.min(force, MAX_FORCE); // Limita força máxima
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-
-        if (!a.fixed) { a.vx -= fx; a.vy -= fy; }
-        if (!b.fixed) { b.vx += fx; b.vy += fy; }
-      }
-    }
-
-    // Força dos links
-    edges.forEach(edge => {
-      const source = nodeMap.get(edge.source);
-      const target = nodeMap.get(edge.target);
-      if (!source || !target) return;
-
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const dist = Math.max(Math.sqrt(dx * dx + dy * dy), MIN_DIST);
-
-      const idealDist = LINK_DISTANCE + (target.depth || 1) * 15;
-      const diff = dist - idealDist;
-      let force = diff * LINK_STRENGTH * alpha;
-      force = Math.max(-MAX_FORCE, Math.min(force, MAX_FORCE)); // Limita força
-      const fx = (dx / dist) * force;
-      const fy = (dy / dist) * force;
-
-      if (!source.fixed) { source.vx += fx; source.vy += fy; }
-      if (!target.fixed) { target.vx -= fx; target.vy -= fy; }
-    });
-
-    // Colisão
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i];
-        const b = nodes[j];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-        const minCollisionDist = COLLISION_RADIUS * 2;
-
-        if (dist < minCollisionDist) {
-          const overlap = Math.min((minCollisionDist - dist) / 2, MAX_FORCE);
-          const fx = (dx / dist) * overlap * 0.5;
-          const fy = (dy / dist) * overlap * 0.5;
-
-          if (!a.fixed) { a.x -= fx; a.y -= fy; }
-          if (!b.fixed) { b.x += fx; b.y += fy; }
-        }
-      }
-    }
-
-    // Aplicar velocidades (com limite)
-    nodes.forEach(n => {
-      if (n.fixed) return;
-      // Limita velocidade máxima
-      n.vx = Math.max(-MAX_VELOCITY, Math.min(n.vx, MAX_VELOCITY));
-      n.vy = Math.max(-MAX_VELOCITY, Math.min(n.vy, MAX_VELOCITY));
-      n.x += n.vx;
-      n.y += n.vy;
-      n.vx *= DAMPING;
-      n.vy *= DAMPING;
-    });
-  }
-
-  // Limpar propriedades temporárias e atualizar ângulos
-  nodes.forEach(n => {
-    if (n.depth !== 0) {
-      n.labelAngle = Math.atan2(n.y, n.x);
-    }
-    delete n.vx;
-    delete n.vy;
-    delete n.fixed;
-  });
+  // Usa o novo layout hierárquico em setores
+  relayoutHierarchical(nodes, edges);
 
   // Anima os containers visuais para as novas posições
   animateNodesToNewPositions();
+}
+
+// Expõe no window para ajuste via DevTools
+// Uso no console:
+//   config.collision.TEXT_WEIGHT = 0.8
+//   relayout()
+//   showEllipses() / hideEllipses()
+if (typeof window !== 'undefined') {
+  window.relayout = relayoutAfterExpansion;
+
+  // Container para debug das elipses
+  let ellipseDebugContainer = null;
+
+  window.showEllipses = function() {
+    // Remove container anterior se existir
+    if (ellipseDebugContainer) {
+      ellipseDebugContainer.destroy({ children: true });
+    }
+
+    // Cria novo container
+    ellipseDebugContainer = new PIXI.Container();
+    state.nodesContainer.parent.addChild(ellipseDebugContainer);
+
+    const { BASE_RADIUS, CHAR_WIDTH, TEXT_WEIGHT } = config.collision;
+    const { DISTANCE: LABEL_DISTANCE, PADDING } = config.label;
+    const nodeSize = config.nodeSize;
+    const TEXT_HEIGHT = 14;
+
+    state.nodesData.forEach(n => {
+      // Usa getDisplayName para consistência com graph-layout.js e nodes.js
+      const displayName = getDisplayName(n);
+      const textLength = displayName.length;
+      const textWidth = textLength * CHAR_WIDTH;
+      const semiMinor = BASE_RADIUS;
+      const semiMajor = BASE_RADIUS + textWidth * TEXT_WEIGHT;
+
+      const labelAngle = n.labelAngle || 0;
+      const isRoot = n.depth === 0;
+      const nodeRadius = isRoot ? nodeSize.ROOT :
+                         (n.type === 'directory' ? nodeSize.DIRECTORY : nodeSize.FILE);
+      const labelDistance = nodeRadius + LABEL_DISTANCE;
+
+      // Usa calculateTextCenter de graph-layout.js (com PADDING)
+      const textCenter = calculateTextCenter(labelAngle, labelDistance, textWidth, TEXT_HEIGHT, isRoot, PADDING);
+
+      const ellipse = new PIXI.Graphics();
+      ellipse.setStrokeStyle({ width: 1, color: 0x00ff00, alpha: 0.5 });
+
+      // Desenha elipse horizontal
+      const steps = 32;
+      for (let i = 0; i <= steps; i++) {
+        const t = (i / steps) * Math.PI * 2;
+        const ex = Math.cos(t) * semiMajor;
+        const ey = Math.sin(t) * semiMinor;
+        if (i === 0) {
+          ellipse.moveTo(ex, ey);
+        } else {
+          ellipse.lineTo(ex, ey);
+        }
+      }
+      ellipse.stroke();
+
+      // Posiciona no centro real do texto
+      ellipse.x = n.x + textCenter.x;
+      ellipse.y = n.y + textCenter.y;
+      ellipseDebugContainer.addChild(ellipse);
+    });
+
+    console.log('Ellipses shown (centered on text). Use hideEllipses() to hide.');
+  };
+
+  window.hideEllipses = function() {
+    if (ellipseDebugContainer) {
+      ellipseDebugContainer.destroy({ children: true });
+      ellipseDebugContainer = null;
+      console.log('Ellipses hidden.');
+    }
+  };
 }
 
 // Flag para evitar animações sobrepostas
@@ -560,12 +536,16 @@ function animateNodesToNewPositions() {
   const duration = 500; // ms
   const startTime = performance.now();
 
-  // Salva posições iniciais dos containers
+  // Salva posições iniciais dos containers e labelAngles
   const startPositions = new Map();
   nodes.forEach(node => {
     const container = state.nodeGraphics.get(node.id);
     if (container) {
-      startPositions.set(node.id, { x: container.x, y: container.y });
+      startPositions.set(node.id, {
+        x: container.x,
+        y: container.y,
+        labelAngle: container.nodeData?.labelAngle ?? node.labelAngle
+      });
     }
   });
 
@@ -581,6 +561,13 @@ function animateNodesToNewPositions() {
         if (container && startPos) {
           container.x = startPos.x + (node.x - startPos.x) * easeProgress;
           container.y = startPos.y + (node.y - startPos.y) * easeProgress;
+
+          // Atualiza labelAngle no nodeData do container para a animação
+          if (container.nodeData) {
+            container.nodeData.labelAngle = node.labelAngle;
+          }
+          // Atualiza posição do label junto com o container
+          updateLabelPosition(container, node);
         }
       });
 
@@ -593,6 +580,8 @@ function animateNodesToNewPositions() {
           if (container) {
             container.x = node.x;
             container.y = node.y;
+            // Garante posição final do label
+            updateLabelPosition(container, node);
           }
         });
         // Reseta cache de edges para redesenhar com novas posições
