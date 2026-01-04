@@ -7,7 +7,7 @@ import { updateMtimeRange } from './colors.js';
 import { createNode, updateLabelPosition } from './nodes.js';
 import { createEdgeParticles, resetEdgeGraphicsCache } from './effects.js';
 import { relayoutHierarchical, calculateTextCenter } from './graph-layout.js';
-import { config, getDisplayName } from './config.js';
+import { config, getDisplayName, getNodeRadius } from './config.js';
 
 // Expõe PIXI para debug no console
 if (typeof window !== 'undefined') {
@@ -465,9 +465,7 @@ if (typeof window !== 'undefined') {
     state.nodesContainer.parent.addChild(ellipseDebugContainer);
 
     const { BASE_RADIUS, CHAR_WIDTH, TEXT_WEIGHT } = config.collision;
-    const { DISTANCE: LABEL_DISTANCE, PADDING } = config.label;
-    const nodeSize = config.nodeSize;
-    const TEXT_HEIGHT = 14;
+    const { DISTANCE: LABEL_DISTANCE, PADDING, TEXT_HEIGHT } = config.label;
 
     state.nodesData.forEach(n => {
       // Usa getDisplayName para consistência com graph-layout.js e nodes.js
@@ -479,8 +477,7 @@ if (typeof window !== 'undefined') {
 
       const labelAngle = n.labelAngle || 0;
       const isRoot = n.depth === 0;
-      const nodeRadius = isRoot ? nodeSize.ROOT :
-                         (n.type === 'directory' ? nodeSize.DIRECTORY : nodeSize.FILE);
+      const nodeRadius = getNodeRadius(n);
       const labelDistance = nodeRadius + LABEL_DISTANCE;
 
       // Usa calculateTextCenter de graph-layout.js (com PADDING)

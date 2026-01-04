@@ -1,6 +1,6 @@
 import * as PIXI from '../node_modules/pixi.js/dist/pixi.mjs';
 import { COLORS } from './colors.js';
-import { config, getDisplayName } from './config.js';
+import { config, getDisplayName, getNodeRadius } from './config.js';
 
 export function createFolderIcon(color, isRoot) {
   const icon = new PIXI.Graphics();
@@ -108,13 +108,7 @@ export function updateLabelPosition(container, node) {
   if (!labelContainer) return;
 
   const isRoot = node.depth === 0;
-  const isMoreNode = node.type === 'more-dirs' || node.type === 'more-files';
-  const isDirectory = node.type === 'directory';
-
-  const baseRadius = isRoot ? config.nodeSize.ROOT :
-                     (isDirectory ? config.nodeSize.DIRECTORY :
-                     (isMoreNode ? config.nodeSize.MORE : config.nodeSize.FILE));
-
+  const baseRadius = getNodeRadius(node);
   const labelDistance = baseRadius + config.label.DISTANCE;
   const padding = config.label.PADDING;
 
@@ -165,9 +159,7 @@ export function createNode(node, allNodes, nodeGraphics, selectedNode, renderDet
   const isMoreNode = isMoreDirs || isMoreFiles;
   const isExpandedItem = node.isExpandedItem === true; // Nó que veio de expansão (estilo muted)
 
-  const baseRadius = isRoot ? config.nodeSize.ROOT :
-                     (isDirectory ? config.nodeSize.DIRECTORY :
-                     (isMoreNode ? config.nodeSize.MORE : config.nodeSize.FILE));
+  const baseRadius = getNodeRadius(node);
   const color = isRoot ? COLORS.rootNode :
                 (isDirectory ? COLORS.directory :
                 (isMoreDirs ? COLORS.moreDirs :

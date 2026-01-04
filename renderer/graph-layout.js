@@ -1,6 +1,6 @@
 // Funções de layout do grafo
 
-import { config, getDisplayName } from './config.js';
+import { config, getDisplayName, getNodeRadius } from './config.js';
 
 /**
  * Calcula o peso (número de descendentes) de cada nó na árvore.
@@ -255,9 +255,7 @@ export function calculateTextCenter(labelAngle, labelDistance, textWidth, textHe
  */
 function applyCollisionForces(nodes, nodeMap) {
   const { BASE_RADIUS, CHAR_WIDTH, TEXT_WEIGHT, ITERATIONS, STRENGTH } = config.collision;
-  const { DISTANCE: LABEL_DISTANCE, PADDING } = config.label;
-  const nodeSize = config.nodeSize;
-  const TEXT_HEIGHT = 14;  // Altura aproximada do texto em pixels
+  const { DISTANCE: LABEL_DISTANCE, PADDING, TEXT_HEIGHT } = config.label;
 
   // Pré-calcula as dimensões fixas da elipse para cada nó (tamanho não muda)
   const ellipseDimensions = new Map();
@@ -270,8 +268,7 @@ function applyCollisionForces(nodes, nodeMap) {
     const semiMinor = BASE_RADIUS;
     const semiMajor = BASE_RADIUS + textWidth * TEXT_WEIGHT;
 
-    const nodeRadius = isRoot ? nodeSize.ROOT :
-                       (n.type === 'directory' ? nodeSize.DIRECTORY : nodeSize.FILE);
+    const nodeRadius = getNodeRadius(n);
     const labelDistance = nodeRadius + LABEL_DISTANCE;
 
     ellipseDimensions.set(n.id, {
@@ -346,10 +343,7 @@ function applyCollisionForces(nodes, nodeMap) {
         const ellipseA = getEllipsePosition(a);
 
         // Raio do círculo do nó b
-        const isRootB = b.depth === 0;
-        const nodeRadiusB = isRootB ? nodeSize.ROOT :
-                           (b.type === 'directory' ? nodeSize.DIRECTORY :
-                           (b.type === 'more-dirs' || b.type === 'more-files' ? nodeSize.MORE : nodeSize.FILE));
+        const nodeRadiusB = getNodeRadius(b);
 
         // Distância do centro da elipse ao centro do nó
         const dx = b.x - ellipseA.x;

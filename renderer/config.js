@@ -25,7 +25,8 @@ export const config = {
     DISTANCE: 12,           // Distância do texto ao nó (além do baseRadius)
     MAX_CHARS_ROOT: 40,     // Máximo de caracteres no root
     MAX_CHARS_NODE: 30,     // Máximo de caracteres nos outros nós
-    PADDING: { x: 4, y: 2 } // Padding do background do texto
+    PADDING: { x: 4, y: 2 }, // Padding do background do texto
+    TEXT_HEIGHT: 14         // Altura aproximada do texto em pixels
   },
 
   // Tamanho dos nós (raio)
@@ -81,6 +82,20 @@ export function getDisplayName(node) {
 
   const maxChars = isRoot ? config.label.MAX_CHARS_ROOT : config.label.MAX_CHARS_NODE;
   return truncateName(name, maxChars);
+}
+
+/**
+ * Retorna o raio do nó baseado no tipo.
+ * Centraliza a lógica para evitar duplicação em nodes.js, graph-layout.js, etc.
+ */
+export function getNodeRadius(node) {
+  const isRoot = node.depth === 0;
+  const isDirectory = node.type === 'directory';
+  const isMoreNode = node.type === 'more-dirs' || node.type === 'more-files';
+
+  return isRoot ? config.nodeSize.ROOT :
+         isDirectory ? config.nodeSize.DIRECTORY :
+         isMoreNode ? config.nodeSize.MORE : config.nodeSize.FILE;
 }
 
 // Expõe no window para debug
