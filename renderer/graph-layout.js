@@ -300,6 +300,7 @@ function applyCollisionForces(nodes, nodeMap) {
   for (let iter = 0; iter < ITERATIONS; iter++) {
     const alpha = 1 - iter / ITERATIONS;
 
+    // Colisão elipse vs elipse (texto vs texto)
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i];
@@ -328,6 +329,47 @@ function applyCollisionForces(nodes, nodeMap) {
           const fy = (dy / dist) * overlap;
 
           // Não move o root
+          if (a.depth !== 0) { a.x -= fx; a.y -= fy; }
+          if (b.depth !== 0) { b.x += fx; b.y += fy; }
+        }
+      }
+    }
+
+    // Colisão elipse vs círculo do nó (texto vs nó)
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = 0; j < nodes.length; j++) {
+        if (i === j) continue;
+
+        const a = nodes[i]; // nó cuja elipse verificamos
+        const b = nodes[j]; // nó cujo círculo verificamos
+
+        const ellipseA = getEllipsePosition(a);
+
+        // Raio do círculo do nó b
+        const isRootB = b.depth === 0;
+        const nodeRadiusB = isRootB ? nodeSize.ROOT :
+                           (b.type === 'directory' ? nodeSize.DIRECTORY :
+                           (b.type === 'more-dirs' || b.type === 'more-files' ? nodeSize.MORE : nodeSize.FILE));
+
+        // Distância do centro da elipse ao centro do nó
+        const dx = b.x - ellipseA.x;
+        const dy = b.y - ellipseA.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        // Ângulo da elipse para o círculo
+        const angle = Math.atan2(dy, dx);
+
+        // Raio efetivo da elipse na direção do círculo
+        const radiusA = getEllipseRadius(ellipseA.semiMajor, ellipseA.semiMinor, 0, angle);
+
+        const minDist = radiusA + nodeRadiusB;
+
+        if (dist < minDist) {
+          const overlap = (minDist - dist) / 2 * STRENGTH * alpha;
+          const fx = (dx / dist) * overlap;
+          const fy = (dy / dist) * overlap;
+
+          // Empurra ambos os nós (a elipse de 'a' sai do círculo de 'b')
           if (a.depth !== 0) { a.x -= fx; a.y -= fy; }
           if (b.depth !== 0) { b.x += fx; b.y += fy; }
         }
