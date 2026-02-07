@@ -150,42 +150,12 @@ class EverythingCliEngine extends BaseSearchEngine {
     return null;
   }
 
-  async isAvailable() {
-    const esPath = this._findEsExe();
-
-    if (!esPath) {
-      return {
-        available: false,
-        message: 'es.exe (Everything CLI) não encontrado. Baixe em voidtools.com/downloads/#cli e coloque em bin/ ou no PATH do sistema.'
-      };
-    }
-
-    // Primeiro, verifica se o Everything está rodando
-    if (!this._isEverythingRunning()) {
-      // Tenta iniciar automaticamente
-      console.log('[Everything] Everything não está rodando. Tentando iniciar...');
-      const started = await this._startEverything();
-
-      if (!started) {
-        const everythingPath = this._findEverythingExe();
-        if (!everythingPath) {
-          return {
-            available: false,
-            message: 'Everything não está instalado. Instale em voidtools.com e tente novamente.'
-          };
-        }
-        return {
-          available: false,
-          message: 'Não foi possível iniciar o Everything automaticamente. Inicie manualmente.'
-        };
-      }
-
-      // Aguarda mais um pouco para garantir que o IPC está pronto
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
+  /**
+   * Testa se o Everything IPC está respondendo via es.exe
+   * @returns {{ available: boolean, message: string } | null} resultado ou null se falhou com IPC error
+   */
+  _testEverythingIpc(esPath) {
     try {
-      // Verifica se o Everything está respondendo
       const result = execSync(`"${esPath}" -get-everything-version`, {
         encoding: 'utf-8',
         timeout: 5000,
@@ -198,42 +168,73 @@ class EverythingCliEngine extends BaseSearchEngine {
           message: `Everything CLI disponível: ${result.trim()}`
         };
       }
+      return null;
     } catch (error) {
-      // Se ainda falhar, pode ser que o Everything precise de mais tempo
       if (error.message.includes('IPC') || error.status === 1) {
-        // Tenta mais uma vez após aguardar
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        try {
-          const result = execSync(`"${esPath}" -get-everything-version`, {
-            encoding: 'utf-8',
-            timeout: 5000,
-            windowsHide: true
-          });
-
-          if (result.includes('Everything') || result.match(/\d+\.\d+/)) {
-            return {
-              available: true,
-              message: `Everything CLI disponível: ${result.trim()}`
-            };
-          }
-        } catch (e) {
-          return {
-            available: false,
-            message: 'Everything iniciou mas ainda não está pronto. Aguarde alguns segundos e tente novamente.'
-          };
-        }
+        return null; // IPC not ready yet, caller should retry
       }
-
       return {
         available: false,
         message: `Erro ao verificar Everything: ${error.message}`
       };
     }
+  }
+
+  async isAvailable() {
+    const esPath = this._findEsExe();
+
+    if (!esPath) {
+      return {
+        available: false,
+        message: 'es.exe (Everything CLI) não encontrado. Baixe em voidtools.com/downloads/#cli e coloque em bin/ ou no PATH do sistema.'
+      };
+    }
+
+    // Testa IPC primeiro - pode já estar funcionando
+    const quickTest = this._testEverythingIpc(esPath);
+    if (quickTest !== null && quickTest.available) {
+      return quickTest;
+    }
+
+    // IPC não está pronto - garante que o Everything está rodando na sessão do usuário
+    // (o serviço Session 0 aparece no tasklist mas não tem IPC window)
+    console.log('[Everything] IPC não respondeu. Iniciando Everything na sessão do usuário...');
+    const everythingPath = this._findEverythingExe();
+    if (!everythingPath) {
+      return {
+        available: false,
+        message: 'Everything não está instalado. Instale em voidtools.com e tente novamente.'
+      };
+    }
+
+    const proc = spawn(everythingPath, ['-startup'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+    proc.unref();
+
+    // Polling - Everything pode levar até 30s para indexar após cold boot
+    const MAX_WAIT_MS = 30000;
+    const POLL_INTERVAL_MS = 2000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < MAX_WAIT_MS) {
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+
+      const result = this._testEverythingIpc(esPath);
+
+      if (result !== null && result.available) {
+        return result;
+      }
+
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      console.log(`[Everything] IPC ainda não está pronto (${elapsed}s). Aguardando...`);
+    }
 
     return {
       available: false,
-      message: 'Não foi possível verificar o status do Everything.'
+      message: 'Everything iniciou mas ainda não está pronto após 30s. Verifique se o Everything está funcionando corretamente.'
     };
   }
 
