@@ -322,18 +322,6 @@ section.right {
   border: 1px solid transparent;
 }
 
-.badge.directory {
-  background: rgba(100, 136, 168, 0.15);
-  border-color: rgba(100, 136, 168, 0.4);
-  color: #6488a8;
-}
-
-.badge.file {
-  background: rgba(139, 154, 107, 0.15);
-  border-color: rgba(139, 154, 107, 0.4);
-  color: #8b9a6b;
-}
-
 .badge.fallback {
   background: rgba(201, 183, 125, 0.15);
   border-color: rgba(201, 183, 125, 0.4);
