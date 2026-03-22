@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Menu, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu, clipboard, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -155,6 +155,23 @@ function loadLastScan() {
     console.error('[Persist] Erro ao carregar scan:', error.message);
   }
   return null;
+}
+
+/**
+ * Resolve o caminho de desenvolvimento padrão com fallback por plataforma.
+ */
+function resolveDevScanPath() {
+  const candidates = process.platform === 'win32'
+    ? ['C:\\dev', 'C:\\']
+    : ['/mnt/c/dev', '/'];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
 }
 
 // Global reference to main window (needed for context menu HWND)
@@ -314,6 +331,49 @@ app.whenReady().then(async () => {
         rootPath: drivePath
       };
     }
+  });
+
+  // Escaneia pasta de desenvolvimento padrão (C:\dev ou /mnt/c/dev)
+  ipcMain.handle('search-engines:scan-dev', async (event, options = {}) => {
+    const devPath = resolveDevScanPath();
+    try {
+      const result = await searchEngineManager.scan(devPath, options);
+      const scanResult = {
+        success: true,
+        tree: result.tree,
+        rootPath: devPath,
+        stats: result.stats,
+        fallbackUsed: false,
+        timestamp: Date.now()
+      };
+      saveLastScan(scanResult);
+      return scanResult;
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        rootPath: devPath
+      };
+    }
+  });
+
+  // Abre seletor nativo para escolher diretório de scan
+  ipcMain.handle('search-engines:pick-directory', async () => {
+    const win = BrowserWindow.getFocusedWindow() || mainWindow;
+    const response = await dialog.showOpenDialog(win, {
+      title: 'Escolha uma pasta para escanear',
+      properties: ['openDirectory']
+    });
+
+    if (response.canceled || response.filePaths.length === 0) {
+      return { success: false, canceled: true };
+    }
+
+    return {
+      success: true,
+      canceled: false,
+      path: response.filePaths[0]
+    };
   });
 
   // Cancela operação em andamento

@@ -22,6 +22,8 @@ const details = document.getElementById('details');
 const fallbackBadge = document.getElementById('fallback-badge');
 const btnScanUser = document.getElementById('btn-scan-user');
 const btnScanDrive = document.getElementById('btn-scan-drive');
+const btnScanDev = document.getElementById('btn-scan-dev');
+const btnScanCustom = document.getElementById('btn-scan-custom');
 const scanStatus = document.getElementById('scan-status');
 const maxFilesInput = document.getElementById('max-files-input');
 const scanModal = document.getElementById('scan-modal');
@@ -37,6 +39,8 @@ function setInitialLoading(loading, message = 'Carregando...') {
   scanStatus.textContent = loading ? message : '';
   btnScanUser.disabled = loading;
   btnScanDrive.disabled = loading;
+  btnScanDev.disabled = loading;
+  btnScanCustom.disabled = loading;
 }
 
 async function bootstrap() {
@@ -263,11 +267,13 @@ function getTopFiles() {
  */
 function setupScanButtons() {
   let isScanning = false;
+  const scanButtons = [btnScanUser, btnScanDrive, btnScanDev, btnScanCustom];
 
   const setScanning = (scanning, message = '') => {
     isScanning = scanning;
-    btnScanUser.disabled = scanning;
-    btnScanDrive.disabled = scanning;
+    scanButtons.forEach((button) => {
+      button.disabled = scanning;
+    });
     maxFilesInput.disabled = scanning;
     scanStatus.textContent = message;
   };
@@ -341,6 +347,31 @@ function setupScanButtons() {
     btnScanDrive,
     'Escanear C:'
   ));
+
+  // Botão: Escanear Dev (C:\dev ou /mnt/c/dev)
+  btnScanDev.addEventListener('click', () => performScan(
+    (topFiles) => window.graphfs.searchEngines.scanDev({ topFiles }),
+    'dev',
+    btnScanDev,
+    'Escanear Dev'
+  ));
+
+  // Botão: Escolher pasta
+  btnScanCustom.addEventListener('click', async () => {
+    if (isScanning) return;
+
+    const selected = await window.graphfs.searchEngines.pickDirectory();
+    if (!selected?.success || selected.canceled || !selected.path) {
+      return;
+    }
+
+    performScan(
+      (topFiles) => window.graphfs.searchEngines.scan(selected.path, { topFiles }),
+      selected.path,
+      btnScanCustom,
+      'Escolher Pasta'
+    );
+  });
 }
 
 /**

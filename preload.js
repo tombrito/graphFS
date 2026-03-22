@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('graphfs', {
     // Escaneia um drive (default: C:)
     scanDrive: (drive, options) => ipcRenderer.invoke('search-engines:scan-drive', drive, options),
 
+    // Escaneia o diretório de desenvolvimento padrão (C:\dev ou /mnt/c/dev)
+    scanDev: (options) => ipcRenderer.invoke('search-engines:scan-dev', options),
+
+    // Abre seletor de pasta nativo e retorna o caminho selecionado
+    pickDirectory: () => ipcRenderer.invoke('search-engines:pick-directory'),
+
     // Cancela operação em andamento
     cancel: () => ipcRenderer.invoke('search-engines:cancel')
   },
